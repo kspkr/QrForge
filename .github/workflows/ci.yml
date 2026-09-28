@@ -45,7 +45,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
       - name: gofmt
@@ -85,7 +85,7 @@ jobs:
       QRFORGE_TEST_POSTGRES_URL: postgres://qrforge:qrforge@localhost:5432/qrforge_test?sslmode=disable
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
       # All packages share one database, so run them one at a time.
