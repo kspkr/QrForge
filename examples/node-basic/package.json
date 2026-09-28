@@ -1,0 +1,12 @@
+{
+  "name": "qrforge-example-node-basic",
+  "private": true,
+  "type": "module",
+  "description": "Generate SVG, PNG and PDF QR codes locally with @qrforge/core.",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "@qrforge/core": "^0.1.0"
+  }
+}

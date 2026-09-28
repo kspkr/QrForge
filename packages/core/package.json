@@ -1,0 +1,49 @@
+{
+  "name": "@qrforge/core",
+  "version": "0.1.0",
+  "description": "Zero-dependency, deterministic QR code generation for browsers and Node.js — SVG, PNG and PDF with styling, logos and frames.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./src/index.js",
+  "module": "./src/index.js",
+  "types": "./src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.d.ts",
+      "default": "./src/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "sideEffects": false,
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "qr",
+    "qrcode",
+    "qr-code",
+    "svg",
+    "png",
+    "pdf",
+    "wifi",
+    "vcard",
+    "generator"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kspkr/QrForge.git",
+    "directory": "packages/core"
+  },
+  "homepage": "https://github.com/kspkr/QrForge/tree/main/packages/core#readme",
+  "scripts": {
+    "test": "node --test \"test/**/*.test.js\""
+  },
+  "devDependencies": {
+    "jsqr": "^1.4.0"
+  }
+}

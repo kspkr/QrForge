@@ -1,0 +1,44 @@
+{
+  "name": "@qrforge/sdk",
+  "version": "0.1.0",
+  "description": "Tiny, dependency-free JavaScript client for the QRForge REST API — dynamic QR codes, campaigns and analytics.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./src/index.js",
+  "types": "./src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.d.ts",
+      "default": "./src/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "sideEffects": false,
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "qr",
+    "qrcode",
+    "dynamic-qr",
+    "api",
+    "sdk",
+    "client",
+    "analytics",
+    "self-hosted"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kspkr/QrForge.git",
+    "directory": "packages/sdk"
+  },
+  "homepage": "https://github.com/kspkr/QrForge/tree/main/packages/sdk#readme",
+  "scripts": {
+    "test": "node --test \"test/**/*.test.js\""
+  }
+}

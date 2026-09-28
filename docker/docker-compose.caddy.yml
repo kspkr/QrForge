@@ -1,0 +1,32 @@
+# Production overlay: automatic HTTPS (Let's Encrypt) and custom domains via Caddy.
+#
+#   QRFORGE_DOMAIN=qr.example.com docker compose -f docker-compose.yml -f docker/docker-compose.caddy.yml up -d
+#
+# Caddy is free and open source; certificates come from Let's Encrypt at no cost.
+
+services:
+  qrforge:
+    ports: !reset []
+    environment:
+      QRFORGE_BASE_URL: https://${QRFORGE_DOMAIN:?set QRFORGE_DOMAIN}
+      # Caddy runs on the compose network; trust its X-Forwarded-For header.
+      QRFORGE_TRUSTED_PROXIES: 172.16.0.0/12,10.0.0.0/8,192.168.0.0/16
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on: [qrforge]
+    environment:
+      QRFORGE_DOMAIN: ${QRFORGE_DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL:-}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+
+volumes:
+  caddy-data:
+  caddy-config:

@@ -1,0 +1,1261 @@
+openapi: 3.1.0
+info:
+  title: QRForge API
+  version: 0.1.0
+  summary: Self-hosted API for dynamic QR codes, campaigns and privacy-friendly analytics.
+  description: |
+    The QRForge REST API. All endpoints live under `/api/v1` and exchange JSON with
+    snake_case fields. Timestamps are RFC 3339 strings in UTC.
+
+    ## Authentication
+    - **API keys** (recommended for scripts): `Authorization: Bearer qrf_...`. Create keys in the
+      dashboard (Settings → API keys). The full key is shown exactly once; only a hash is stored.
+      API keys can manage QR codes, campaigns and analytics, and read domains. They cannot manage
+      API keys, change account details or use admin endpoints.
+    - **Browser sessions**: the `qrforge_session` HttpOnly cookie set by `/auth/login`. Every
+      state-changing request made with a session must send the `X-CSRF-Token` header returned by
+      `/auth/login`, `/auth/register` and `/auth/me`.
+
+    ## Errors
+    Errors use the HTTP status code plus a body of the form
+    `{"error": {"code": "validation_failed", "message": "...", "fields": {"destination": "..."}}}`.
+
+    ## Pagination
+    List endpoints accept `page` (1-based) and `per_page` (1–100, default 20) and respond with
+    `{"data": [...], "pagination": {"page", "per_page", "total"}}`.
+
+    ## Rate limits
+    Requests are rate limited per client IP and per API key. Exceeding a limit returns `429`
+    with a `Retry-After` header.
+  license:
+    name: MIT
+    identifier: MIT
+servers:
+  - url: http://localhost:8080/api/v1
+    description: Local development
+tags:
+  - name: System
+  - name: Auth
+  - name: QR codes
+  - name: Analytics
+  - name: Campaigns
+  - name: Domains
+  - name: API keys
+  - name: Audit
+  - name: Abuse
+  - name: Admin
+security:
+  - apiKey: []
+  - session: []
+
+paths:
+  /health:
+    get:
+      tags: [System]
+      summary: Health check
+      security: []
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Health" }
+        "503":
+          description: Database unavailable
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Health" }
+  /config:
+    get:
+      tags: [System]
+      summary: Public instance configuration
+      security: []
+      responses:
+        "200":
+          description: Instance configuration
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PublicConfig" }
+  /openapi.yaml:
+    get:
+      tags: [System]
+      summary: This OpenAPI document
+      security: []
+      responses:
+        "200":
+          description: OpenAPI 3.1 document
+          content:
+            application/yaml: {}
+
+  /auth/register:
+    post:
+      tags: [Auth]
+      summary: Create an account
+      description: The first account on an instance becomes an administrator and is always allowed, even when registration is closed.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string, minLength: 8, maxLength: 72, description: "8–72 bytes (bcrypt limit)" }
+                name: { type: string, maxLength: 100 }
+      responses:
+        "201": { $ref: "#/components/responses/SessionResponse" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Log in
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string }
+      responses:
+        "200": { $ref: "#/components/responses/SessionResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: Log out (deletes the session)
+      security: [{ session: [] }, {}]
+      parameters: [{ $ref: "#/components/parameters/CSRF" }]
+      responses:
+        "204": { description: Logged out }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /auth/me:
+    get:
+      tags: [Auth]
+      summary: Current user
+      responses:
+        "200":
+          description: The authenticated user
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user: { $ref: "#/components/schemas/User" }
+                  csrf_token: { type: [string, "null"], description: "null when authenticated with an API key" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    patch:
+      tags: [Auth]
+      summary: Update profile
+      security: [{ session: [] }]
+      parameters: [{ $ref: "#/components/parameters/CSRF" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string, maxLength: 100 }
+                email: { type: string, format: email }
+                current_password: { type: string, description: Required when changing the email address }
+      responses:
+        "200":
+          description: Updated user
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user: { $ref: "#/components/schemas/User" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+  /auth/password/change:
+    post:
+      tags: [Auth]
+      summary: Change password
+      description: Revokes all other sessions.
+      security: [{ session: [] }]
+      parameters: [{ $ref: "#/components/parameters/CSRF" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [current_password, new_password]
+              properties:
+                current_password: { type: string }
+                new_password: { type: string, minLength: 8, maxLength: 72, description: "8–72 bytes (bcrypt limit)" }
+      responses:
+        "204": { description: Password changed }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+  /auth/password/forgot:
+    post:
+      tags: [Auth]
+      summary: Request a password reset link
+      description: |
+        Always returns 202 so the response never reveals whether an account exists. When SMTP is
+        configured the link is emailed; otherwise it is written to the server log for the
+        administrator to deliver.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string, format: email }
+      responses:
+        "202": { $ref: "#/components/responses/Accepted" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /auth/password/reset:
+    post:
+      tags: [Auth]
+      summary: Reset a password with a token
+      description: Tokens are single-use and expire after one hour. All sessions are revoked.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, password]
+              properties:
+                token: { type: string }
+                password: { type: string, minLength: 8, maxLength: 72, description: "8–72 bytes (bcrypt limit)" }
+      responses:
+        "204": { description: Password reset }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+
+  /qrcodes:
+    post:
+      tags: [QR codes]
+      summary: Create a QR code
+      description: |
+        Dynamic codes (default) encode a short redirect URL (`/r/{slug}`) whose destination can be
+        changed later. Static codes store the encoded payload for re-downloading and organisation.
+        `type` is accepted as an alias of `kind`.
+      parameters: [{ $ref: "#/components/parameters/CSRF" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/QRCodeCreate" }
+            examples:
+              dynamic:
+                value: { name: Website, type: dynamic, destination: "https://example.com" }
+              static:
+                value: { name: Guest Wi-Fi, kind: static, qr_type: wifi, content: "WIFI:T:WPA;S:Cafe;P:espresso;;" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/QRCode" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+    get:
+      tags: [QR codes]
+      summary: List QR codes
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+        - { name: kind, in: query, schema: { type: string, enum: [static, dynamic] } }
+        - { name: status, in: query, schema: { type: string, enum: [active, disabled] } }
+        - { name: campaign_id, in: query, schema: { type: string } }
+        - { name: q, in: query, description: Search name, destination, slug and content, schema: { type: string } }
+        - name: sort
+          in: query
+          schema: { type: string, enum: [created_at, -created_at, name, -name, scan_count, -scan_count], default: -created_at }
+      responses:
+        "200":
+          description: A page of QR codes
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Paginated"
+                  - type: object
+                    properties:
+                      data: { type: array, items: { $ref: "#/components/schemas/QRCode" } }
+  /qrcodes/{id}:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    get:
+      tags: [QR codes]
+      summary: Get a QR code
+      responses:
+        "200":
+          description: The QR code
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/QRCode" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      tags: [QR codes]
+      summary: Update a QR code
+      description: Only the provided fields change. Destination changes are recorded in the redirect history. Send `null` to clear nullable fields.
+      parameters: [{ $ref: "#/components/parameters/CSRF" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/QRCodeUpdate" }
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/QRCode" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+    delete:
+      tags: [QR codes]
+      summary: Delete a QR code (and its analytics)
+      parameters: [{ $ref: "#/components/parameters/CSRF" }]
+      responses:
+        "204": { description: Deleted }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /qrcodes/{id}/rotate-slug:
+    post:
+      tags: [QR codes]
+      summary: Replace the slug of a dynamic code
+      description: The old slug stops resolving immediately. Printed codes using the old slug will no longer work.
+      parameters: [{ $ref: "#/components/parameters/Id" }, { $ref: "#/components/parameters/CSRF" }]
+      responses:
+        "200":
+          description: Updated code with a new slug
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/QRCode" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+  /qrcodes/{id}/duplicate:
+    post:
+      tags: [QR codes]
+      summary: Duplicate a QR code
+      parameters: [{ $ref: "#/components/parameters/Id" }, { $ref: "#/components/parameters/CSRF" }]
+      responses:
+        "201":
+          description: The copy (new slug, no scans)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/QRCode" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /qrcodes/{id}/history:
+    get:
+      tags: [QR codes]
+      summary: Destination history (newest first)
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses:
+        "200":
+          description: History entries
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        destination: { type: string }
+                        previous_destination: { type: [string, "null"] }
+                        changed_at: { type: string, format: date-time }
+                        changed_by_email: { type: [string, "null"] }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /qrcodes/{id}/analytics:
+    get:
+      tags: [Analytics]
+      summary: Analytics for one QR code
+      parameters: [{ $ref: "#/components/parameters/Id" }, { $ref: "#/components/parameters/Range" }]
+      responses:
+        "200":
+          description: Analytics report
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Analytics" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+  /analytics/overview:
+    get:
+      tags: [Analytics]
+      summary: Analytics across all of your QR codes
+      parameters: [{ $ref: "#/components/parameters/Range" }]
+      responses:
+        "200":
+          description: Analytics report with top codes
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Analytics"
+                  - type: object
+                    properties:
+                      top_qrcodes: { type: array, items: { $ref: "#/components/schemas/NamedCount" } }
+
+  /campaigns:
+    get:
+      tags: [Campaigns]
+      summary: List campaigns
+      parameters: [{ $ref: "#/components/parameters/Page" }, { $ref: "#/components/parameters/PerPage" }]
+      responses:
+        "200":
+          description: A page of campaigns
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Paginated"
+                  - type: object
+                    properties:
+                      data: { type: array, items: { $ref: "#/components/schemas/Campaign" } }
+    post:
+      tags: [Campaigns]
+      summary: Create a campaign
+      parameters: [{ $ref: "#/components/parameters/CSRF" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CampaignInput" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Campaign" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+  /campaigns/{id}:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    get:
+      tags: [Campaigns]
+      summary: Get a campaign
+      responses:
+        "200":
+          description: The campaign
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Campaign" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      tags: [Campaigns]
+      summary: Update a campaign
+      parameters: [{ $ref: "#/components/parameters/CSRF" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CampaignInput" }
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Campaign" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+    delete:
+      tags: [Campaigns]
+      summary: Delete a campaign
+      description: QR codes in the campaign are kept and unassigned.
+      parameters: [{ $ref: "#/components/parameters/CSRF" }]
+      responses:
+        "204": { description: Deleted }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /campaigns/{id}/analytics:
+    get:
+      tags: [Campaigns, Analytics]
+      summary: Campaign analytics
+      parameters: [{ $ref: "#/components/parameters/Id" }, { $ref: "#/components/parameters/Range" }]
+      responses:
+        "200":
+          description: Analytics report with per-code scans
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Analytics"
+                  - type: object
+                    properties:
+                      per_qrcode: { type: array, items: { $ref: "#/components/schemas/NamedCount" } }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /domains:
+    get:
+      tags: [Domains]
+      summary: List custom domains
+      responses:
+        "200":
+          description: Domains
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/Domain" } }
+    post:
+      tags: [Domains]
+      summary: Add a custom domain
+      description: Returns the DNS TXT record to create before calling verify. Session only.
+      security: [{ session: [] }]
+      parameters: [{ $ref: "#/components/parameters/CSRF" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [hostname]
+              properties:
+                hostname: { type: string, examples: [qr.example.com] }
+      responses:
+        "201":
+          description: Created (unverified)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Domain" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+  /domains/{id}:
+    delete:
+      tags: [Domains]
+      summary: Remove a custom domain
+      security: [{ session: [] }]
+      parameters: [{ $ref: "#/components/parameters/Id" }, { $ref: "#/components/parameters/CSRF" }]
+      responses:
+        "204": { description: Deleted }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /domains/check:
+    get:
+      tags: [Domains]
+      summary: On-demand TLS check for reverse proxies
+      description: >-
+        Returns 200 when a TLS certificate may be issued for `domain` (the primary host
+        or a verified custom domain), 404 otherwise. Intended as the `ask` URL of
+        Caddy's `on_demand_tls`. Public; returns no body.
+      security: []
+      parameters:
+        - name: domain
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: Certificate may be issued }
+        "404": { description: Unknown or unverified hostname }
+  /domains/{id}/verify:
+    post:
+      tags: [Domains]
+      summary: Verify domain ownership via DNS TXT lookup
+      security: [{ session: [] }]
+      parameters: [{ $ref: "#/components/parameters/Id" }, { $ref: "#/components/parameters/CSRF" }]
+      responses:
+        "200":
+          description: Verified domain
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Domain" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422":
+          description: TXT record not found (`verification_failed`)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /api-keys:
+    get:
+      tags: [API keys]
+      summary: List API keys
+      security: [{ session: [] }]
+      responses:
+        "200":
+          description: Keys (never including the secret)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/APIKey" } }
+    post:
+      tags: [API keys]
+      summary: Create an API key
+      description: The plaintext `key` is returned only in this response.
+      security: [{ session: [] }]
+      parameters: [{ $ref: "#/components/parameters/CSRF" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string, maxLength: 100 }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  api_key: { $ref: "#/components/schemas/APIKey" }
+                  key: { type: string, examples: [qrf_4f3k9Zx0aLq2mN8pR1sT6uV7wY5bC3dE] }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+  /api-keys/{id}:
+    delete:
+      tags: [API keys]
+      summary: Revoke an API key
+      security: [{ session: [] }]
+      parameters: [{ $ref: "#/components/parameters/Id" }, { $ref: "#/components/parameters/CSRF" }]
+      responses:
+        "204": { description: Revoked }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /audit-log:
+    get:
+      tags: [Audit]
+      summary: Your audit events (newest first)
+      parameters: [{ $ref: "#/components/parameters/Page" }, { $ref: "#/components/parameters/PerPage" }]
+      responses:
+        "200":
+          description: A page of events
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AuditPage" }
+
+  /abuse-reports:
+    post:
+      tags: [Abuse]
+      summary: Report an abusive QR code
+      description: Public. `slug` may be a slug or a full redirect URL. Rate limited per IP.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [slug, reason]
+              properties:
+                slug: { type: string }
+                reason: { type: string, enum: [phishing, malware, spam, illegal, other] }
+                details: { type: string, maxLength: 2000 }
+                reporter_email: { type: [string, "null"], format: email }
+      responses:
+        "202":
+          description: Received
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, const: received }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /admin/overview:
+    get:
+      tags: [Admin]
+      summary: Instance overview
+      security: [{ session: [] }]
+      responses:
+        "200":
+          description: Counts, storage, system health and traffic
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminOverview" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /admin/users:
+    get:
+      tags: [Admin]
+      summary: List users
+      security: [{ session: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+        - { name: q, in: query, schema: { type: string } }
+      responses:
+        "200":
+          description: A page of users
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Paginated"
+                  - type: object
+                    properties:
+                      data: { type: array, items: { $ref: "#/components/schemas/AdminUser" } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /admin/users/{id}:
+    patch:
+      tags: [Admin]
+      summary: Update a user
+      description: Disabling a user revokes their sessions; their API keys and redirects stop working. Admins cannot demote or disable themselves.
+      security: [{ session: [] }]
+      parameters: [{ $ref: "#/components/parameters/Id" }, { $ref: "#/components/parameters/CSRF" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                role: { type: string, enum: [user, admin] }
+                disabled: { type: boolean }
+                max_qrcodes: { type: [integer, "null"], minimum: 0, description: "Per-user limit override; null uses the instance default" }
+      responses:
+        "200":
+          description: Updated user
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminUser" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+  /admin/qrcodes:
+    get:
+      tags: [Admin]
+      summary: List all QR codes
+      security: [{ session: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+        - { name: q, in: query, schema: { type: string } }
+        - { name: status, in: query, schema: { type: string, enum: [active, disabled] } }
+      responses:
+        "200":
+          description: A page of QR codes including `owner_email`
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Paginated"
+                  - type: object
+                    properties:
+                      data: { type: array, items: { $ref: "#/components/schemas/QRCode" } }
+  /admin/qrcodes/{id}:
+    patch:
+      tags: [Admin]
+      summary: Enable or disable any QR code
+      description: Disabling sets `admin_locked` so the owner cannot re-enable the code.
+      security: [{ session: [] }]
+      parameters: [{ $ref: "#/components/parameters/Id" }, { $ref: "#/components/parameters/CSRF" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { type: string, enum: [active, disabled] }
+                disabled_reason: { type: string, maxLength: 500 }
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/QRCode" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /admin/abuse-reports:
+    get:
+      tags: [Admin]
+      summary: List abuse reports
+      security: [{ session: [] }]
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+        - { name: status, in: query, schema: { type: string, enum: [open, resolved, dismissed] } }
+      responses:
+        "200":
+          description: A page of reports
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Paginated"
+                  - type: object
+                    properties:
+                      data: { type: array, items: { $ref: "#/components/schemas/AbuseReport" } }
+  /admin/abuse-reports/{id}:
+    patch:
+      tags: [Admin]
+      summary: Resolve or dismiss a report
+      security: [{ session: [] }]
+      parameters: [{ $ref: "#/components/parameters/Id" }, { $ref: "#/components/parameters/CSRF" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { type: string, enum: [open, resolved, dismissed] }
+                disable_qrcode: { type: boolean, description: Also disable (and admin-lock) the reported code }
+      responses:
+        "200":
+          description: Updated report
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AbuseReport" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /admin/settings:
+    get:
+      tags: [Admin]
+      summary: Instance settings
+      security: [{ session: [] }]
+      responses:
+        "200":
+          description: Settings
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Settings" }
+    patch:
+      tags: [Admin]
+      summary: Update instance settings
+      security: [{ session: [] }]
+      parameters: [{ $ref: "#/components/parameters/CSRF" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Settings" }
+      responses:
+        "200":
+          description: Updated settings
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Settings" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+  /admin/audit-log:
+    get:
+      tags: [Admin]
+      summary: All audit events
+      security: [{ session: [] }]
+      parameters: [{ $ref: "#/components/parameters/Page" }, { $ref: "#/components/parameters/PerPage" }]
+      responses:
+        "200":
+          description: A page of events
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AuditPage" }
+
+components:
+  securitySchemes:
+    apiKey:
+      type: http
+      scheme: bearer
+      bearerFormat: "qrf_<32 chars>"
+      description: API key created in the dashboard.
+    session:
+      type: apiKey
+      in: cookie
+      name: qrforge_session
+      description: Browser session. Unsafe requests also require the `X-CSRF-Token` header.
+
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      schema: { type: string }
+    Page:
+      name: page
+      in: query
+      schema: { type: integer, minimum: 1, default: 1 }
+    PerPage:
+      name: per_page
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+    Range:
+      name: range
+      in: query
+      schema: { type: string, enum: [24h, 7d, 30d, 90d, 365d, all], default: 30d }
+    CSRF:
+      name: X-CSRF-Token
+      in: header
+      required: false
+      description: Required for session-authenticated requests; not used with API keys.
+      schema: { type: string }
+
+  responses:
+    SessionResponse:
+      description: Authenticated. Sets the `qrforge_session` cookie.
+      headers:
+        Set-Cookie: { schema: { type: string } }
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              user: { $ref: "#/components/schemas/User" }
+              csrf_token: { type: string }
+    Accepted:
+      description: Accepted
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              status: { type: string, const: accepted }
+    Unauthorized:
+      description: Missing or invalid credentials (`unauthorized`, `invalid_credentials`)
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+    Forbidden:
+      description: Not allowed (`forbidden`, `csrf_failed`, `limit_reached`, `registration_closed`, `account_disabled`)
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+    NotFound:
+      description: Not found (or not owned by the caller)
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+    Conflict:
+      description: Already exists (`conflict`)
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+    ValidationFailed:
+      description: Invalid input (`validation_failed`, `destination_blocked`)
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+    RateLimited:
+      description: Too many requests (`rate_limited`)
+      headers:
+        Retry-After: { schema: { type: integer } }
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  schemas:
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              enum: [validation_failed, invalid_json, unauthorized, forbidden, csrf_failed, not_found, conflict, rate_limited,
+                payload_too_large, registration_closed, account_disabled, invalid_credentials, limit_reached,
+                destination_blocked, verification_failed, internal]
+            message: { type: string }
+            fields:
+              type: object
+              additionalProperties: { type: string }
+    Paginated:
+      type: object
+      properties:
+        pagination:
+          type: object
+          properties:
+            page: { type: integer }
+            per_page: { type: integer }
+            total: { type: integer }
+    Health:
+      type: object
+      properties:
+        status: { type: string, enum: [ok, degraded] }
+        version: { type: string }
+        database: { type: string, enum: [ok, error] }
+    PublicConfig:
+      type: object
+      properties:
+        version: { type: string }
+        base_url: { type: string, format: uri }
+        registration_enabled: { type: boolean }
+        setup_required: { type: boolean, description: True when no account exists yet }
+        features:
+          type: object
+          properties:
+            analytics: { type: boolean }
+            custom_domains: { type: boolean }
+            password_reset_email: { type: boolean }
+        limits:
+          type: object
+          properties:
+            max_redirect_length: { type: integer }
+    User:
+      type: object
+      properties:
+        id: { type: string, examples: [usr_k3j9x0q2m4n8p1r5] }
+        email: { type: string, format: email }
+        name: { type: string }
+        role: { type: string, enum: [user, admin] }
+        created_at: { type: string, format: date-time }
+    AdminUser:
+      allOf:
+        - $ref: "#/components/schemas/User"
+        - type: object
+          properties:
+            disabled: { type: boolean }
+            qr_count: { type: integer }
+            last_login_at: { type: [string, "null"], format: date-time }
+            max_qrcodes: { type: [integer, "null"] }
+    UTM:
+      type: object
+      additionalProperties: false
+      properties:
+        source: { type: string, maxLength: 200 }
+        medium: { type: string, maxLength: 200 }
+        campaign: { type: string, maxLength: 200 }
+        term: { type: string, maxLength: 200 }
+        content: { type: string, maxLength: 200 }
+    QRType:
+      type: string
+      enum: [url, text, wifi, vcard, email, sms, phone, location, calendar]
+    QRCode:
+      type: object
+      properties:
+        id: { type: string, examples: [qr_k3j9x0q2m4n8p1r5] }
+        name: { type: string }
+        kind: { type: string, enum: [static, dynamic] }
+        qr_type: { $ref: "#/components/schemas/QRType" }
+        content: { type: string, description: "What is encoded in the QR code: the static payload, or redirect_url for dynamic codes" }
+        destination: { type: [string, "null"], format: uri }
+        slug: { type: [string, "null"], examples: [abc123] }
+        redirect_url: { type: [string, "null"], format: uri, examples: ["https://qr.example.com/r/abc123"] }
+        status: { type: string, enum: [active, disabled] }
+        disabled_reason: { type: [string, "null"] }
+        admin_locked: { type: boolean, description: Disabled by an administrator; the owner cannot re-enable it }
+        expires_at: { type: [string, "null"], format: date-time }
+        has_password: { type: boolean }
+        utm: { oneOf: [{ $ref: "#/components/schemas/UTM" }, { type: "null" }] }
+        analytics_enabled: { type: boolean }
+        campaign_id: { type: [string, "null"] }
+        domain_id: { type: [string, "null"] }
+        design: { type: [object, "null"], description: "Opaque @qrforge/core style options (max 256 KB)" }
+        form_data: { type: [object, "null"], description: "Opaque structured input used to build the payload (max 64 KB)" }
+        scan_count: { type: integer }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        owner_email: { type: string, description: Admin listings only }
+    QRCodeCreate:
+      type: object
+      properties:
+        name: { type: string, maxLength: 200, description: Defaults to the destination host }
+        kind: { type: string, enum: [static, dynamic], default: dynamic }
+        type: { type: string, enum: [static, dynamic], description: Alias of kind }
+        destination: { type: string, format: uri, description: Required for dynamic codes. http(s) only. }
+        qr_type: { $ref: "#/components/schemas/QRType" }
+        content: { type: string, maxLength: 4096, description: Required for static codes }
+        slug: { type: string, pattern: "^[A-Za-z0-9][A-Za-z0-9_-]{2,63}$", description: Custom slug (dynamic only); random when omitted }
+        status: { type: string, enum: [active, disabled] }
+        expires_at: { type: [string, "null"], format: date-time }
+        password: { type: [string, "null"], maxLength: 72, description: "Protect the redirect with a password (dynamic only, at most 72 bytes)" }
+        utm: { oneOf: [{ $ref: "#/components/schemas/UTM" }, { type: "null" }] }
+        analytics_enabled: { type: boolean, default: true }
+        campaign_id: { type: [string, "null"] }
+        domain_id: { type: [string, "null"] }
+        design: { type: [object, "null"] }
+        form_data: { type: [object, "null"] }
+    QRCodeUpdate:
+      type: object
+      properties:
+        name: { type: string, maxLength: 200 }
+        destination: { type: string, format: uri }
+        qr_type: { $ref: "#/components/schemas/QRType" }
+        content: { type: string, maxLength: 4096 }
+        slug: { type: string }
+        status: { type: string, enum: [active, disabled] }
+        expires_at: { type: [string, "null"], format: date-time }
+        password: { type: [string, "null"], description: 'Empty string or null removes the password' }
+        utm: { oneOf: [{ $ref: "#/components/schemas/UTM" }, { type: "null" }] }
+        analytics_enabled: { type: boolean }
+        campaign_id: { type: [string, "null"] }
+        domain_id: { type: [string, "null"] }
+        design: { type: [object, "null"] }
+        form_data: { type: [object, "null"] }
+    Analytics:
+      type: object
+      properties:
+        totals:
+          type: object
+          description: Over all retained scans. Periods are UTC calendar periods (week starts Monday).
+          properties:
+            total_scans: { type: integer }
+            unique_scans: { type: integer }
+            today: { type: integer }
+            this_week: { type: integer }
+            this_month: { type: integer }
+        range:
+          type: object
+          properties:
+            key: { type: string }
+            from: { type: string, format: date-time }
+            to: { type: string, format: date-time }
+            granularity: { type: string, enum: [hour, day] }
+        timeseries:
+          type: array
+          description: Every bucket in the range, zero-filled.
+          items:
+            type: object
+            properties:
+              bucket: { type: string, examples: ["2026-09-01", "2026-09-01T13:00:00Z"] }
+              scans: { type: integer }
+              unique: { type: integer }
+        range_totals:
+          type: object
+          properties:
+            scans: { type: integer }
+            unique: { type: integer }
+        browsers: { $ref: "#/components/schemas/Breakdown" }
+        os: { $ref: "#/components/schemas/Breakdown" }
+        devices: { $ref: "#/components/schemas/Breakdown" }
+        countries: { $ref: "#/components/schemas/Breakdown" }
+        referrers: { $ref: "#/components/schemas/Breakdown" }
+    Breakdown:
+      type: array
+      description: Top 10 values within the range.
+      items:
+        type: object
+        properties:
+          name: { type: string }
+          count: { type: integer }
+    NamedCount:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        scans: { type: integer }
+    Campaign:
+      type: object
+      properties:
+        id: { type: string, examples: [cmp_k3j9x0q2m4n8p1r5] }
+        name: { type: string }
+        description: { type: string }
+        color: { type: [string, "null"], examples: ["#4f46e5"] }
+        qr_count: { type: integer }
+        scan_count: { type: integer }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    CampaignInput:
+      type: object
+      properties:
+        name: { type: string, maxLength: 100 }
+        description: { type: [string, "null"], maxLength: 500 }
+        color: { type: [string, "null"], pattern: "^#[0-9a-fA-F]{6}$" }
+    Domain:
+      type: object
+      properties:
+        id: { type: string }
+        hostname: { type: string }
+        verified: { type: boolean }
+        verification_record:
+          type: object
+          properties:
+            type: { type: string, const: TXT }
+            name: { type: string, examples: [_qrforge-challenge.qr.example.com] }
+            value: { type: string, examples: [qrforge-verify=abc123] }
+        created_at: { type: string, format: date-time }
+        verified_at: { type: [string, "null"], format: date-time }
+    APIKey:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        prefix: { type: string, examples: [qrf_4f3k9Zx0] }
+        last_used_at: { type: [string, "null"], format: date-time }
+        usage_count: { type: integer }
+        created_at: { type: string, format: date-time }
+    AuditEvent:
+      type: object
+      properties:
+        id: { type: string }
+        action: { type: string, examples: [qrcode.create, auth.login, admin.settings_update] }
+        actor_id: { type: [string, "null"] }
+        actor_email: { type: string }
+        target_type: { type: string }
+        target_id: { type: string }
+        metadata: { type: object }
+        created_at: { type: string, format: date-time }
+    AuditPage:
+      allOf:
+        - $ref: "#/components/schemas/Paginated"
+        - type: object
+          properties:
+            data: { type: array, items: { $ref: "#/components/schemas/AuditEvent" } }
+    AbuseReport:
+      type: object
+      properties:
+        id: { type: string }
+        slug: { type: string }
+        qrcode_id: { type: [string, "null"] }
+        reason: { type: string, enum: [phishing, malware, spam, illegal, other] }
+        details: { type: string }
+        reporter_email: { type: [string, "null"] }
+        status: { type: string, enum: [open, resolved, dismissed] }
+        created_at: { type: string, format: date-time }
+        resolved_at: { type: [string, "null"], format: date-time }
+    Settings:
+      type: object
+      properties:
+        registration_enabled: { type: boolean }
+        max_qrcodes_per_user: { type: integer, minimum: 0, description: 0 = unlimited }
+        max_redirect_length: { type: integer, minimum: 64, maximum: 8192 }
+        domain_allowlist: { type: array, items: { type: string }, description: When non-empty, destinations must be on these domains (subdomains included) }
+        domain_blocklist: { type: array, items: { type: string }, description: Destinations on these domains (and subdomains) are refused }
+        block_private_destinations: { type: boolean, description: Refuse localhost, private, link-local and internal-only destinations }
+        analytics_retention_days: { type: integer, minimum: 0, maximum: 3650, description: 0 = keep forever }
+    AdminOverview:
+      type: object
+      properties:
+        counts:
+          type: object
+          properties:
+            users: { type: integer }
+            qrcodes: { type: integer }
+            dynamic_qrcodes: { type: integer }
+            active_redirects: { type: integer }
+            scans_total: { type: integer }
+            scans_24h: { type: integer }
+            open_abuse_reports: { type: integer }
+            api_keys: { type: integer }
+            api_requests_total: { type: integer }
+        storage:
+          type: object
+          properties:
+            driver: { type: string, enum: [sqlite, postgres] }
+            database_bytes: { type: integer }
+        system:
+          type: object
+          properties:
+            version: { type: string }
+            go_version: { type: string }
+            uptime_seconds: { type: integer }
+            goroutines: { type: integer }
+            memory_bytes: { type: integer }
+            database: { type: string, enum: [ok, error] }
+        traffic:
+          type: array
+          description: Daily scans for the last 30 days
+          items:
+            type: object
+            properties:
+              bucket: { type: string }
+              scans: { type: integer }

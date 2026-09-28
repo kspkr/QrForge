@@ -1,0 +1,52 @@
+# QRForge — full production-style stack (PostgreSQL + QRForge).
+#
+#   docker compose up -d        →  http://localhost
+#
+# Settings can be overridden in a .env file next to this file (see .env.example).
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: qrforge
+      POSTGRES_USER: qrforge
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-qrforge}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U qrforge -d qrforge"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    # Exposed on localhost only, for `npm run dev` against Postgres.
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+
+  qrforge:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    image: ${QRFORGE_IMAGE:-ghcr.io/kspkr/qrforge:latest}
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      QRFORGE_DATABASE_URL: postgres://qrforge:${POSTGRES_PASSWORD:-qrforge}@postgres:5432/qrforge?sslmode=disable
+      QRFORGE_BASE_URL: ${QRFORGE_BASE_URL:-http://localhost}
+      QRFORGE_REGISTRATION: ${QRFORGE_REGISTRATION:-open}
+      QRFORGE_ADMIN_EMAIL: ${QRFORGE_ADMIN_EMAIL:-}
+      QRFORGE_ADMIN_PASSWORD: ${QRFORGE_ADMIN_PASSWORD:-}
+      QRFORGE_TRUSTED_PROXIES: ${QRFORGE_TRUSTED_PROXIES:-}
+      QRFORGE_COUNTRY_HEADER: ${QRFORGE_COUNTRY_HEADER:-}
+      QRFORGE_SMTP_HOST: ${QRFORGE_SMTP_HOST:-}
+      QRFORGE_SMTP_PORT: ${QRFORGE_SMTP_PORT:-587}
+      QRFORGE_SMTP_USERNAME: ${QRFORGE_SMTP_USERNAME:-}
+      QRFORGE_SMTP_PASSWORD: ${QRFORGE_SMTP_PASSWORD:-}
+      QRFORGE_SMTP_FROM: ${QRFORGE_SMTP_FROM:-}
+    ports:
+      - "${QRFORGE_PORT:-80}:8080"
+
+volumes:
+  postgres-data:

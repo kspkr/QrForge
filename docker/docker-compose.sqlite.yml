@@ -1,0 +1,20 @@
+# Minimal single-container QRForge using SQLite (no PostgreSQL).
+#
+#   docker compose -f docker/docker-compose.sqlite.yml up -d   →  http://localhost
+
+services:
+  qrforge:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: ghcr.io/kspkr/qrforge:latest
+    restart: unless-stopped
+    environment:
+      QRFORGE_BASE_URL: ${QRFORGE_BASE_URL:-http://localhost}
+    volumes:
+      - qrforge-data:/data
+    ports:
+      - "${QRFORGE_PORT:-80}:8080"
+
+volumes:
+  qrforge-data:

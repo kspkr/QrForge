@@ -1,0 +1,34 @@
+name: Documentation
+description: Something is missing, unclear or wrong in the docs
+labels: [documentation]
+body:
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      options:
+        - Web app (Studio / dashboard)
+        - "@qrforge/core"
+        - "@qrforge/react"
+        - CLI (qrforge)
+        - "@qrforge/sdk"
+        - API / server
+        - Docker / self-hosting
+        - Documentation
+    validations:
+      required: true
+  - type: input
+    id: page
+    attributes:
+      label: Page or file
+      placeholder: apps/docs/guide/self-hosting.md
+  - type: textarea
+    id: issue
+    attributes:
+      label: What's wrong or missing?
+    validations:
+      required: true
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: Suggested improvement

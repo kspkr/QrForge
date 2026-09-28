@@ -1,0 +1,25 @@
+/* QRForge ember accent on top of the default VitePress theme. */
+:root {
+  --vp-c-brand-1: #ea4d12;
+  --vp-c-brand-2: #ff6a2b;
+  --vp-c-brand-3: #ff6a2b;
+  --vp-c-brand-soft: rgba(255, 106, 43, 0.14);
+  --vp-home-hero-name-color: transparent;
+  --vp-home-hero-name-background: linear-gradient(120deg, #ff6a2b 20%, #c2390f);
+  --vp-button-brand-bg: #ea4d12;
+  --vp-button-brand-hover-bg: #ff6a2b;
+  --vp-button-brand-active-bg: #c2390f;
+}
+
+.dark {
+  --vp-c-brand-1: #ff8445;
+  --vp-c-brand-2: #ff6a2b;
+  --vp-c-brand-3: #ea4d12;
+  --vp-c-bg: #09090b;
+  --vp-c-bg-alt: #0f0f12;
+  --vp-c-bg-soft: #18181b;
+}
+
+.VPHero .image-bg {
+  background-image: radial-gradient(circle, rgba(255, 106, 43, 0.25), transparent 70%);
+}

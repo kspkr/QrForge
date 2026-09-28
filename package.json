@@ -1,0 +1,33 @@
+{
+  "name": "qrforge-monorepo",
+  "private": true,
+  "description": "QRForge — the open-source QR platform.",
+  "license": "MIT",
+  "type": "module",
+  "workspaces": [
+    "packages/core",
+    "packages/react",
+    "packages/cli",
+    "packages/sdk",
+    "apps/web",
+    "apps/docs"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "dev:web": "node scripts/dev.mjs --web",
+    "dev:docs": "npm run dev -w @qrforge/docs",
+    "build": "npm run build -w @qrforge/web",
+    "build:docs": "npm run build -w @qrforge/docs",
+    "api": "cd apps/api && go run .",
+    "test": "npm run test --workspaces --if-present",
+    "test:go": "go test ./server/... ./apps/api/...",
+    "lint": "npm run lint --workspaces --if-present",
+    "format": "prettier --write ."
+  },
+  "devDependencies": {
+    "prettier": "^3.6.2"
+  }
+}

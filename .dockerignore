@@ -1,0 +1,11 @@
+**/node_modules
+**/dist
+**/.vitepress/cache
+**/.vitepress/dist
+**/*.db
+**/data
+.git
+.github
+coverage
+*.log
+.env

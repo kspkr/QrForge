@@ -1,0 +1,51 @@
+{
+  "name": "qrforge",
+  "version": "0.1.0",
+  "description": "QRForge CLI — generate beautiful QR codes (URL, Wi-Fi, vCard, email, SMS, location, events) as SVG, PNG or PDF. Fully offline.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "qrforge": "./bin/qrforge.js"
+  },
+  "main": "./src/cli.js",
+  "exports": {
+    ".": "./src/cli.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "bin",
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "qr",
+    "qrcode",
+    "qr-code",
+    "cli",
+    "wifi",
+    "vcard",
+    "svg",
+    "png",
+    "pdf",
+    "offline"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kspkr/QrForge.git",
+    "directory": "packages/cli"
+  },
+  "homepage": "https://github.com/kspkr/QrForge/tree/main/packages/cli#readme",
+  "scripts": {
+    "test": "node --test \"test/**/*.test.js\""
+  },
+  "dependencies": {
+    "@qrforge/core": "^0.1.0"
+  },
+  "devDependencies": {
+    "jsqr": "^1.4.0"
+  }
+}

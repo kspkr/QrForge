@@ -1,0 +1,36 @@
+- name: good first issue
+  color: "7057ff"
+  description: Good for newcomers
+- name: help wanted
+  color: "008672"
+  description: Extra attention is needed
+- name: documentation
+  color: "0075ca"
+  description: Improvements or additions to documentation
+- name: frontend
+  color: "ff6a2b"
+  description: Web app (apps/web)
+- name: backend
+  color: "00add8"
+  description: Go API, redirect service and storage
+- name: cli
+  color: "5319e7"
+  description: The qrforge command-line tool
+- name: sdk
+  color: "1d76db"
+  description: "@qrforge/core, @qrforge/react or @qrforge/sdk"
+- name: bug
+  color: "d73a4a"
+  description: Something isn't working
+- name: enhancement
+  color: "a2eeef"
+  description: New feature or request
+- name: security
+  color: "b60205"
+  description: Security hardening (report vulnerabilities privately, see SECURITY.md)
+- name: dependencies
+  color: "0366d6"
+  description: Dependency updates
+- name: question
+  color: "d876e3"
+  description: Further information is requested

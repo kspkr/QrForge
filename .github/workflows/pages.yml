@@ -1,0 +1,71 @@
+name: Pages
+
+# Publishes the static QR Studio and the documentation to GitHub Pages:
+#   https://<owner>.github.io/<repo>/        Studio (static codes only, no server features)
+#   https://<owner>.github.io/<repo>/docs/   Documentation
+#
+# One-time setup: Settings → Pages → Source: "GitHub Actions".
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      - name: Build Studio
+        run: npm run build -w @qrforge/web
+        env:
+          VITE_BASE: /${{ github.event.repository.name }}/
+          VITE_STATIC_ONLY: "true"
+          VITE_REPO_URL: ${{ github.server_url }}/${{ github.repository }}
+          VITE_DOCS_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/docs/
+
+      - name: Build docs
+        run: npm run build -w @qrforge/docs
+        env:
+          DOCS_BASE: /${{ github.event.repository.name }}/docs/
+
+      - name: Assemble site
+        run: |
+          mkdir -p _site
+          cp -r apps/web/dist/. _site/
+          # GitHub Pages serves 404.html for unknown paths; reuse the app shell so
+          # client-side routes like /studio work on reload.
+          cp _site/index.html _site/404.html
+          cp -r apps/docs/.vitepress/dist _site/docs
+          touch _site/.nojekyll
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

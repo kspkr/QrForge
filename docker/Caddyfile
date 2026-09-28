@@ -1,0 +1,22 @@
+{
+	email {$ACME_EMAIL}
+	# On-demand TLS lets verified custom domains get certificates automatically.
+	# Caddy asks QRForge whether a hostname is allowed before issuing a certificate.
+	on_demand_tls {
+		ask http://qrforge:8080/api/v1/domains/check
+	}
+}
+
+# Primary domain.
+{$QRFORGE_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy qrforge:8080
+}
+
+# Custom domains added by users (qr.theircompany.com/r/...).
+https:// {
+	tls {
+		on_demand
+	}
+	reverse_proxy qrforge:8080
+}

@@ -1,0 +1,13 @@
+{
+  "name": "qrforge-example-sdk-node",
+  "private": true,
+  "type": "module",
+  "description": "Create a dynamic QR code and read analytics with @qrforge/sdk.",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "@qrforge/core": "^0.1.0",
+    "@qrforge/sdk": "^0.1.0"
+  }
+}
