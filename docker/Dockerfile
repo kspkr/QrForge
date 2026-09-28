@@ -21,7 +21,7 @@ COPY apps/web apps/web
 RUN npm run build --workspace @qrforge/web
 
 # --- API server ----------------------------------------------------------------
-FROM golang:1.26-alpine AS api
+FROM golang:1.27-alpine AS api
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
