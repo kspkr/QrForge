@@ -32,7 +32,7 @@ ARG VERSION=dev
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/qrforge ./apps/api
 
 # --- Runtime -------------------------------------------------------------------
-FROM alpine:3.22
+FROM alpine:3.24
 RUN apk add --no-cache ca-certificates tzdata \
  && adduser -D -H -u 10001 qrforge \
  && mkdir -p /data \
