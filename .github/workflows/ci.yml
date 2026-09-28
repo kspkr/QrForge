@@ -18,7 +18,7 @@ jobs:
     name: Node (lint, test, build)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: 24
@@ -44,7 +44,7 @@ jobs:
     name: Go (fmt, vet, test, build)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
@@ -84,7 +84,7 @@ jobs:
     env:
       QRFORGE_TEST_POSTGRES_URL: postgres://qrforge:qrforge@localhost:5432/qrforge_test?sslmode=disable
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
@@ -95,7 +95,7 @@ jobs:
     name: Docker build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: docker/setup-buildx-action@v3
       - uses: docker/build-push-action@v6
         with:
