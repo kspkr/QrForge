@@ -4,7 +4,7 @@
 # Build from the repository root:  docker build -f docker/Dockerfile -t qrforge .
 
 # --- Web app -----------------------------------------------------------------
-FROM node:24-alpine AS web
+FROM node:26-alpine AS web
 WORKDIR /src
 # Workspace manifests first so dependency installation is cached.
 COPY package.json package-lock.json ./
