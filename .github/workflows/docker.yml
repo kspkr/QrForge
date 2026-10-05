@@ -37,7 +37,7 @@ jobs:
             type=semver,pattern={{major}}
           flavor: |
             latest=${{ startsWith(github.ref, 'refs/tags/v') && !contains(github.ref_name, '-') }}
-      - uses: docker/build-push-action@v6
+      - uses: docker/build-push-action@v7
         with:
           context: .
           file: docker/Dockerfile
