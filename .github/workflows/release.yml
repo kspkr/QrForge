@@ -89,7 +89,7 @@ jobs:
             done
           done
           (cd dist && sha256sum -- * > SHA256SUMS)
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: binaries
           path: dist/
