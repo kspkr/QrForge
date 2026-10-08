@@ -62,7 +62,7 @@ Open http://localhost and register. The first account becomes the administrator.
 | --- | --- |
 | [`@qrforge/core`](packages/core) | QR encoder and SVG/PNG/PDF renderer with no runtime dependencies. Works in browsers and Node.js. |
 | [`@qrforge/react`](packages/react) | `<QRCode>` component, `useQRCode` hook and download helpers. |
-| [`qrforge`](packages/cli) | Command-line generator. Works offline. |
+| [`@qrforge/cli`](packages/cli) | Command-line generator. Works offline. |
 | [`@qrforge/sdk`](packages/sdk) | Client for the REST API. |
 
 ```js
@@ -84,7 +84,7 @@ import { QRCode } from "@qrforge/react";
 ```
 
 ```bash
-npm install -g qrforge
+npm install -g @qrforge/cli
 qrforge generate https://example.com -o code.svg
 qrforge wifi --ssid Office --password correct-horse -o wifi.png
 ```

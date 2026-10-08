@@ -44,7 +44,7 @@ cd apps/web && npm run dev               # web app (http://localhost:5173)
 | --- | --- | --- |
 | `packages/core` | `@qrforge/core` | `node --test`; every style is decoded with the independent jsQR decoder |
 | `packages/react` | `@qrforge/react` | Vitest and Testing Library |
-| `packages/cli` | `qrforge` | `node --test`, running the CLI as a child process |
+| `packages/cli` | `@qrforge/cli` | `node --test`, running the CLI as a child process |
 | `packages/sdk` | `@qrforge/sdk` | `node --test` with a mocked `fetch` and a real HTTP server |
 | `apps/web` | `@qrforge/web` | Vitest and Testing Library |
 | `apps/docs` | `@qrforge/docs` | The build fails on dead links |

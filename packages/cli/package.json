@@ -1,5 +1,5 @@
 {
-  "name": "qrforge",
+  "name": "@qrforge/cli",
   "version": "0.1.0",
   "description": "QRForge CLI — generate beautiful QR codes (URL, Wi-Fi, vCard, email, SMS, location, events) as SVG, PNG or PDF. Fully offline.",
   "license": "MIT",

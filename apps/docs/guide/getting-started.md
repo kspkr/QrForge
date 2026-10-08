@@ -45,8 +45,8 @@ const svg = await generateQR({ data: "https://example.com", format: "svg" });
 Generate codes from the terminal:
 
 ```bash
-npx qrforge generate https://example.com            # preview in the terminal
-npx qrforge wifi --ssid Cafe --password espresso -o wifi.png
+npx @qrforge/cli generate https://example.com            # preview in the terminal
+npx @qrforge/cli wifi --ssid Cafe --password espresso -o wifi.png
 ```
 
 Run the full platform:

@@ -8,7 +8,7 @@ QRForge is a monorepo of components that can be used independently. Install only
 | --- | --- | --- |
 | [`@qrforge/core`](./core) | `npm install @qrforge/core` | Node.js 18+ or a modern browser |
 | [`@qrforge/react`](./react) | `npm install @qrforge/react` | React 17+ |
-| [`qrforge` CLI](./cli) | `npm install -g qrforge` | Node.js 18+ |
+| [`@qrforge/cli`](./cli) | `npm install -g @qrforge/cli` | Node.js 18+ |
 | [`@qrforge/sdk`](./sdk) | `npm install @qrforge/sdk` | Any runtime with `fetch` (Node.js 18+, Deno, Bun, browsers) |
 
 All packages are ES modules with TypeScript definitions and require no build step. `@qrforge/core` has no runtime dependencies.

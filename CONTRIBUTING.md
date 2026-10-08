@@ -33,7 +33,7 @@ The [development guide](apps/docs/guide/development.md) lists all commands, and 
 | --- | --- | --- |
 | QR encoder and renderers | `packages/core` | `npm test -w @qrforge/core` |
 | React components | `packages/react` | `npm test -w @qrforge/react` |
-| CLI | `packages/cli` | `npm test -w qrforge` |
+| CLI | `packages/cli` | `npm test -w @qrforge/cli` |
 | API client | `packages/sdk` | `npm test -w @qrforge/sdk` |
 | Web app (Studio, dashboard, admin) | `apps/web` | `npm test -w @qrforge/web` |
 | Server (API, redirects, analytics) | `server/`, `apps/api` | `npm run test:go` |

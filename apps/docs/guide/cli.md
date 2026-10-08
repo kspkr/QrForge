@@ -3,9 +3,9 @@
 The `qrforge` command generates QR codes from a terminal or script. It is built on [`@qrforge/core`](./core) and works offline.
 
 ```bash
-npm install -g qrforge
+npm install -g @qrforge/cli
 # or without installing
-npx qrforge generate https://example.com
+npx @qrforge/cli generate https://example.com
 ```
 
 Requires Node.js 18+.

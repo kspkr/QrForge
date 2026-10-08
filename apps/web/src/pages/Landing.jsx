@@ -121,7 +121,7 @@ export default function App() {
     id: "cli",
     label: "CLI",
     icon: Terminal,
-    code: `npm install -g qrforge
+    code: `npm install -g @qrforge/cli
 
 qrforge generate https://example.com --output qr.svg
 qrforge wifi --ssid "Cafe" --password "espresso" -o wifi.png

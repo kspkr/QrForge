@@ -1,4 +1,4 @@
-# qrforge
+# @qrforge/cli
 
 Command-line tool for creating QR codes from URLs, Wi-Fi networks, contacts, email, SMS, locations and calendar events. It writes SVG, PNG or PDF files, or draws the code in the terminal.
 
@@ -11,9 +11,9 @@ Built on [`@qrforge/core`](https://www.npmjs.com/package/@qrforge/core).
 ## Installation
 
 ```bash
-npm install -g qrforge
+npm install -g @qrforge/cli
 # or run without installing
-npx qrforge generate https://example.com
+npx @qrforge/cli generate https://example.com
 ```
 
 Requires Node.js 18 or newer.
