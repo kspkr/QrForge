@@ -52,7 +52,7 @@ func openTestDB(t *testing.T) *storage.DB {
 	}
 	t.Cleanup(func() { db.Close() })
 	if db.Dialect == storage.Postgres {
-		for _, tbl := range []string{"scans", "qrcode_history", "abuse_reports", "qrcodes", "campaigns", "domains", "api_keys",
+		for _, tbl := range []string{"scans", "qrcode_history", "abuse_reports", "qrcodes", "files", "campaigns", "domains", "api_keys",
 			"password_resets", "sessions", "audit_logs", "salts", "settings", "users", "schema_migrations"} {
 			db.Exec(context.Background(), "DROP TABLE IF EXISTS "+tbl+" CASCADE")
 		}

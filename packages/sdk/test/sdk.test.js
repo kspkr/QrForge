@@ -179,3 +179,22 @@ test("works against a real HTTP server", async () => {
     await new Promise((r) => server.close(r));
   }
 });
+
+test("uploads files as multipart form data", async () => {
+  let seen;
+  const client = new QRForge({
+    baseUrl: "https://qr.example.com",
+    apiKey: "qrf_secret",
+    fetch: async (url, init) => {
+      seen = { url, init };
+      return new Response(JSON.stringify({ id: "file_1", name: "menu.pdf" }), { status: 201 });
+    },
+  });
+  const file = await client.files.upload(new Blob(["%PDF-1.4"], { type: "application/pdf" }), "menu.pdf");
+  assert.equal(file.id, "file_1");
+  assert.equal(seen.url, "https://qr.example.com/api/v1/files");
+  assert.equal(seen.init.method, "POST");
+  assert.equal(seen.init.headers["Content-Type"], undefined);
+  assert.ok(seen.init.body instanceof FormData);
+  assert.equal(seen.init.body.get("file").name, "menu.pdf");
+});

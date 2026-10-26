@@ -32,7 +32,9 @@ function buildQuery(params) {
 
 export async function request(method, path, { body, query, signal } = {}) {
   const headers = { Accept: "application/json" };
-  if (body !== undefined) headers["Content-Type"] = "application/json";
+  // FormData sets its own multipart Content-Type, including the boundary.
+  const isForm = body instanceof FormData;
+  if (body !== undefined && !isForm) headers["Content-Type"] = "application/json";
   if (method !== "GET" && method !== "HEAD" && csrfToken) headers["X-CSRF-Token"] = csrfToken;
 
   let response;
@@ -40,7 +42,7 @@ export async function request(method, path, { body, query, signal } = {}) {
     response = await fetch(`/api/v1${path}${buildQuery(query)}`, {
       method,
       headers,
-      body: body !== undefined ? JSON.stringify(body) : undefined,
+      body: body === undefined || isForm ? body : JSON.stringify(body),
       credentials: "same-origin",
       signal,
     });
@@ -68,4 +70,9 @@ export const api = {
   post: (path, body, opts) => request("POST", path, { body: body ?? {}, ...opts }),
   patch: (path, body, opts) => request("PATCH", path, { body, ...opts }),
   del: (path, opts) => request("DELETE", path, opts),
+  upload(path, file, opts) {
+    const form = new FormData();
+    form.append("file", file);
+    return request("POST", path, { body: form, ...opts });
+  },
 };

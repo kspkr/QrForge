@@ -4,6 +4,9 @@
 // destination is re-validated against the current abuse policy at redirect
 // time, disabled/expired codes stop resolving immediately, responses are
 // never cached, and analytics recording can never break a redirect.
+//
+// Codes with an uploaded file serve that file from the same route, so
+// passwords, expiry and disabling apply to downloads exactly as to links.
 package redirect
 
 import (
@@ -12,6 +15,7 @@ import (
 	"errors"
 	"html/template"
 	"log/slog"
+	"mime"
 	"net"
 	"net/http"
 	"net/url"
@@ -22,6 +26,7 @@ import (
 	"github.com/kspkr/QrForge/server/analytics"
 	"github.com/kspkr/QrForge/server/auth"
 	"github.com/kspkr/QrForge/server/config"
+	"github.com/kspkr/QrForge/server/files"
 	"github.com/kspkr/QrForge/server/security"
 	"github.com/kspkr/QrForge/server/settings"
 	"github.com/kspkr/QrForge/server/storage"
@@ -38,7 +43,9 @@ type Handler struct {
 	// CodePasswordLimit caps password attempts per code across all clients,
 	// so a distributed guesser can't brute-force one protected link.
 	CodePasswordLimit *security.Limiter
-	Log               *slog.Logger
+	// Files serves uploaded files; nil when file uploads are disabled.
+	Files *files.Store
+	Log   *slog.Logger
 }
 
 // UTM holds campaign parameters appended to destinations.
@@ -110,7 +117,14 @@ func (h *Handler) lookup(ctx context.Context, r *http.Request, slug string) (*st
 	if err != nil {
 		return nil, notFound, err
 	}
-	if q.Kind != "dynamic" || q.Destination == nil {
+	if q.Kind != "dynamic" {
+		return nil, notFound, nil
+	}
+	if q.FileID != nil {
+		if h.Files == nil || q.File == nil {
+			return nil, notFound, nil
+		}
+	} else if q.Destination == nil {
 		return nil, notFound, nil
 	}
 	if host := requestHost(r); host != h.Config.BaseHost() {
@@ -126,8 +140,10 @@ func (h *Handler) lookup(ctx context.Context, r *http.Request, slug string) (*st
 	if q.ExpiresAt != nil && *q.ExpiresAt <= time.Now().Unix() {
 		return q, expired, nil
 	}
-	if _, err := h.Settings.Policy(h.Config.BaseHost()).ValidateDestination(*q.Destination); err != nil {
-		return q, blockedDest, nil
+	if q.FileID == nil {
+		if _, err := h.Settings.Policy(h.Config.BaseHost()).ValidateDestination(*q.Destination); err != nil {
+			return q, blockedDest, nil
+		}
 	}
 	return q, found, nil
 }
@@ -220,12 +236,26 @@ func (h *Handler) renderFailure(w http.ResponseWriter, res lookupResult, slug st
 }
 
 func (h *Handler) redirect(w http.ResponseWriter, r *http.Request, q *storage.QRCode) {
+	h.recordScan(r, q)
+	if q.File != nil {
+		h.serveFile(w, r, q.File)
+		return
+	}
 	dest := *q.Destination
 	if q.UTM != nil {
 		var utm UTM
 		if json.Unmarshal([]byte(*q.UTM), &utm) == nil {
 			dest = MergeUTM(dest, utm)
 		}
+	}
+	w.Header().Set("X-Robots-Tag", "noindex, nofollow")
+	http.Redirect(w, r, dest, http.StatusFound)
+}
+
+func (h *Handler) recordScan(r *http.Request, q *storage.QRCode) {
+	// Resumed or partial downloads are the same scan.
+	if rng := r.Header.Get("Range"); rng != "" && !strings.HasPrefix(rng, "bytes=0-") {
+		return
 	}
 	if r.Method != http.MethodHead && q.AnalyticsEnabled && !analytics.IsBot(r.UserAgent()) {
 		country := ""
@@ -246,8 +276,31 @@ func (h *Handler) redirect(w http.ResponseWriter, r *http.Request, q *storage.QR
 			h.Log.Warn("failed to record scan", "qrcode_id", q.ID, "err", err)
 		}
 	}
-	w.Header().Set("X-Robots-Tag", "noindex, nofollow")
-	http.Redirect(w, r, dest, http.StatusFound)
+}
+
+// serveFile sends an uploaded file. It is always an attachment and the
+// response is sandboxed, so even a file that slipped past type checks can
+// never run as a page on this origin.
+func (h *Handler) serveFile(w http.ResponseWriter, r *http.Request, f *storage.File) {
+	fh, err := h.Files.Open(f.StorageKey)
+	if err != nil {
+		h.Log.Error("open stored file", "file_id", f.ID, "err", err)
+		h.page(w, http.StatusNotFound, pageData{Title: "File unavailable", Message: "This file is no longer available."})
+		return
+	}
+	defer fh.Close()
+
+	disposition := mime.FormatMediaType("attachment", map[string]string{"filename": f.Name})
+	if disposition == "" {
+		disposition = "attachment"
+	}
+	hdr := w.Header()
+	hdr.Set("Content-Type", f.ContentType)
+	hdr.Set("Content-Disposition", disposition)
+	hdr.Set("Content-Security-Policy", "default-src 'none'; sandbox")
+	hdr.Set("X-Robots-Tag", "noindex, nofollow")
+	_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(10 * time.Minute))
+	http.ServeContent(w, r, "", time.Unix(f.CreatedAt, 0), fh)
 }
 
 func setNoStore(w http.ResponseWriter) {

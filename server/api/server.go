@@ -11,11 +11,13 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/kspkr/QrForge/server/analytics"
 	"github.com/kspkr/QrForge/server/auth"
 	"github.com/kspkr/QrForge/server/config"
+	"github.com/kspkr/QrForge/server/files"
 	"github.com/kspkr/QrForge/server/redirect"
 	"github.com/kspkr/QrForge/server/security"
 	"github.com/kspkr/QrForge/server/settings"
@@ -33,6 +35,7 @@ type Server struct {
 	Mailer   *auth.Mailer
 	Log      *slog.Logger
 	OpenAPI  []byte
+	Files    *files.Store // nil unless file uploads are enabled
 
 	// LookupTXT resolves DNS TXT records for custom-domain verification.
 	LookupTXT func(ctx context.Context, name string) ([]string, error)
@@ -44,6 +47,7 @@ type Server struct {
 	emailLimit *security.Limiter
 	abuseLimit *security.Limiter
 	redirect   *redirect.Handler
+	uploadMu   sync.Mutex
 }
 
 // New builds a server. openapi may be nil.
@@ -164,8 +168,12 @@ func isUnsafe(method string) bool {
 // resolves the principal for every /api request.
 func (s *Server) apiMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		r.Body = http.MaxBytesReader(w, r.Body, s.Cfg.MaxBodyBytes)
-		if r.ContentLength > s.Cfg.MaxBodyBytes {
+		limit := s.Cfg.MaxBodyBytes
+		if s.isUpload(r) {
+			limit = s.Cfg.FileUploads.MaxBytes + uploadOverhead
+		}
+		r.Body = http.MaxBytesReader(w, r.Body, limit)
+		if r.ContentLength > limit {
 			writeError(w, errorf(http.StatusRequestEntityTooLarge, "payload_too_large", "Request body is too large."))
 			return
 		}
@@ -291,6 +299,13 @@ func (s *Server) routes(m *http.ServeMux) {
 	h("GET /api-keys", sessionOnly, s.listAPIKeys)
 	h("POST /api-keys", sessionOnly, s.createAPIKey)
 	h("DELETE /api-keys/{id}", sessionOnly, s.deleteAPIKey)
+
+	if s.Files != nil {
+		h("POST /files", userOrKey, s.uploadFile)
+		h("GET /files", userOrKey, s.listFiles)
+		h("GET /files/{id}", userOrKey, s.getFile)
+		h("DELETE /files/{id}", userOrKey, s.deleteFile)
+	}
 
 	h("GET /audit-log", userOrKey, s.auditLog)
 	h("POST /abuse-reports", public, s.createAbuseReport)

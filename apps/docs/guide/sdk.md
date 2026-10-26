@@ -61,6 +61,7 @@ Request and response bodies use the API's snake_case field names.
 | `campaigns.create/list/listAll/get/update/delete/analytics` | `/campaigns…` |
 | `analytics.overview({ range })` | `GET /analytics/overview` |
 | `domains.list()` | `GET /domains` |
+| `files.upload(blob, name)`, `files.list/get/delete` | `/files…` (when [file uploads](./file-uploads) are enabled) |
 | `health()`, `config()` | `GET /health`, `GET /config` |
 | `request(method, path, { query, body })`, `paginate(path, query)` | Low-level access |
 

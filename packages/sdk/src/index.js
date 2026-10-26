@@ -117,6 +117,19 @@ export class QRForge {
     this.domains = {
       list: (params) => this.request("GET", "/domains", { query: params }),
     };
+
+    // Only available on servers started with QRFORGE_FILE_UPLOADS=enabled.
+    const f = (id) => `/files/${enc(id)}`;
+    this.files = {
+      upload: (file, name) => {
+        const form = new FormData();
+        form.append("file", file, name ?? file.name ?? "file");
+        return this.request("POST", "/files", { body: form });
+      },
+      list: () => this.request("GET", "/files"),
+      get: (id) => this.request("GET", f(id)),
+      delete: (id) => this.request("DELETE", f(id)),
+    };
   }
 
   /** `GET /api/v1/health` */
@@ -159,7 +172,10 @@ export class QRForge {
       headers: { Accept: "application/json", ...this.headers, ...headers },
     };
     if (this.apiKey) init.headers.Authorization = `Bearer ${this.apiKey}`;
-    if (body !== undefined) {
+    if (body instanceof FormData) {
+      // fetch sets the multipart Content-Type with its boundary.
+      init.body = body;
+    } else if (body !== undefined) {
       init.headers["Content-Type"] = "application/json";
       init.body = JSON.stringify(body);
     }

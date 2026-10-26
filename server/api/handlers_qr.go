@@ -58,6 +58,7 @@ type qrJSON struct {
 	DomainID         *string         `json:"domain_id"`
 	Design           json.RawMessage `json:"design"`
 	FormData         json.RawMessage `json:"form_data"`
+	File             *fileJSON       `json:"file"`
 	ScanCount        int64           `json:"scan_count"`
 	CreatedAt        string          `json:"created_at"`
 	UpdatedAt        string          `json:"updated_at"`
@@ -85,7 +86,7 @@ func (s *Server) toQRJSON(q *storage.QRCode, withOwner bool) qrJSON {
 		Destination: q.Destination, Slug: q.Slug, Status: q.Status, DisabledReason: q.DisabledReason,
 		AdminLocked: q.AdminLocked, ExpiresAt: tsPtr(q.ExpiresAt), HasPassword: q.PasswordHash != nil,
 		AnalyticsEnabled: q.AnalyticsEnabled, CampaignID: q.CampaignID, DomainID: q.DomainID,
-		Design: rawOrNull(q.Design), FormData: rawOrNull(q.FormData), ScanCount: q.ScanCount,
+		Design: rawOrNull(q.Design), FormData: rawOrNull(q.FormData), File: toFileJSON(q.File), ScanCount: q.ScanCount,
 		CreatedAt: ts(q.CreatedAt), UpdatedAt: ts(q.UpdatedAt),
 	}
 	if q.Kind == "dynamic" && q.Slug != nil {
@@ -116,6 +117,7 @@ type qrFields struct {
 
 	destinationChanged bool
 	previousDest       *string
+	previousFile       *string // file the code served before this change
 }
 
 func (f *qrFields) fail(field, msg string) { f.errs[field] = msg }
@@ -165,14 +167,48 @@ func (f *qrFields) apply(fields map[string]json.RawMessage) {
 				f.previousDest = q.Destination
 				q.Destination = &norm
 			}
-		case "qr_type":
-			v, ok := str(raw)
-			if !ok || !qrTypes[v] {
-				f.fail("qr_type", "must be one of url, text, wifi, vcard, email, sms, phone, location, calendar")
+		case "file_id":
+			if q.Kind != "dynamic" || f.s.Files == nil {
+				if !isNull(raw) {
+					if f.s.Files == nil {
+						f.fail("file_id", "file uploads are not enabled on this server")
+					} else {
+						f.fail("file_id", "is only allowed for dynamic QR codes")
+					}
+				}
 				continue
 			}
-			if q.Kind == "dynamic" && v != "url" {
-				f.fail("qr_type", "dynamic QR codes always have type url")
+			if isNull(raw) {
+				if q.FileID != nil {
+					f.previousFile = q.FileID
+				}
+				q.FileID, q.File = nil, nil
+				continue
+			}
+			v, ok := str(raw)
+			if !ok {
+				f.fail("file_id", "must be a string or null")
+				continue
+			}
+			file, err := f.s.DB.GetFile(f.r.Context(), v, q.UserID)
+			if err != nil {
+				f.fail("file_id", "does not refer to one of your files")
+				continue
+			}
+			if q.FileID != nil && *q.FileID != v {
+				f.previousFile = q.FileID
+			}
+			q.FileID, q.File = &v, file
+		case "qr_type":
+			v, ok := str(raw)
+			if q.Kind == "dynamic" {
+				if !ok || (v != "url" && v != "file") {
+					f.fail("qr_type", "dynamic QR codes have type url or file")
+				}
+				continue // derived from destination or file_id
+			}
+			if !ok || !qrTypes[v] {
+				f.fail("qr_type", "must be one of url, text, wifi, vcard, email, sms, phone, location, calendar")
 				continue
 			}
 			q.QRType = v
@@ -354,6 +390,39 @@ func (f *qrFields) apply(fields map[string]json.RawMessage) {
 	}
 }
 
+// target settles whether a dynamic code redirects or serves a file. A request
+// may set destination or file_id; setting one replaces the other.
+func (f *qrFields) target(fields map[string]json.RawMessage) {
+	q := f.q
+	if q.Kind != "dynamic" {
+		return
+	}
+	setDest := fields["destination"] != nil && !isNull(fields["destination"])
+	setFile := fields["file_id"] != nil && !isNull(fields["file_id"])
+	switch {
+	case setDest && setFile:
+		f.fail("file_id", "cannot be combined with destination")
+		return
+	case setFile && q.FileID != nil:
+		q.Destination = nil
+	case setDest && q.Destination != nil && q.FileID != nil:
+		f.previousFile = q.FileID
+		q.FileID, q.File = nil, nil
+	}
+	if q.FileID != nil {
+		q.QRType = "file"
+	} else {
+		q.QRType = "url"
+	}
+	if q.Destination == nil && q.FileID == nil && f.errs["destination"] == "" && f.errs["file_id"] == "" {
+		if f.creating {
+			f.fail("destination", "is required for dynamic QR codes")
+		} else {
+			f.fail("file_id", "cannot be removed without setting a destination")
+		}
+	}
+}
+
 func (s *Server) newSlug(r *http.Request) (string, error) {
 	for i := 0; i < 8; i++ {
 		slug := storage.RandomString(7, slugAlphabet)
@@ -434,9 +503,7 @@ func (s *Server) createQRCode(w http.ResponseWriter, r *http.Request, p *princip
 		delete(fields, "status")
 	}
 	f.apply(fields)
-	if kind == "dynamic" && q.Destination == nil && f.errs["destination"] == "" {
-		f.fail("destination", "is required for dynamic QR codes")
-	}
+	f.target(fields)
 	if kind == "static" && q.Content == "" && f.errs["content"] == "" {
 		f.fail("content", "is required for static QR codes")
 	}
@@ -462,7 +529,7 @@ func (s *Server) createQRCode(w http.ResponseWriter, r *http.Request, p *princip
 		}
 		return err
 	}
-	if kind == "dynamic" {
+	if kind == "dynamic" && q.Destination != nil {
 		if err := s.DB.AddHistory(r.Context(), q.ID, *q.Destination, nil, p.User.ID); err != nil {
 			return err
 		}
@@ -477,6 +544,9 @@ func (s *Server) createQRCode(w http.ResponseWriter, r *http.Request, p *princip
 }
 
 func defaultName(q *storage.QRCode) string {
+	if q.File != nil {
+		return q.File.Name
+	}
 	if q.Destination != nil {
 		if u := analytics.ReferrerHost(*q.Destination); u != "" {
 			return u
@@ -538,6 +608,7 @@ func (s *Server) updateQRCode(w http.ResponseWriter, r *http.Request, p *princip
 	oldSlug := q.Slug
 	f := &qrFields{s: s, r: r, p: p, q: q, errs: map[string]string{}}
 	f.apply(fields)
+	f.target(fields)
 	if err := fieldsError(f.errs); err != nil {
 		return err
 	}
@@ -550,11 +621,12 @@ func (s *Server) updateQRCode(w http.ResponseWriter, r *http.Request, p *princip
 		}
 		return err
 	}
-	if f.destinationChanged {
+	if f.destinationChanged && q.Destination != nil {
 		if err := s.DB.AddHistory(r.Context(), q.ID, *q.Destination, f.previousDest, p.User.ID); err != nil {
 			return err
 		}
 	}
+	s.releaseFile(r.Context(), f.previousFile)
 	changed := make([]string, 0, len(fields))
 	for k := range fields {
 		if k != "password" {
@@ -577,11 +649,15 @@ func (s *Server) updateQRCode(w http.ResponseWriter, r *http.Request, p *princip
 }
 
 func (s *Server) deleteQRCode(w http.ResponseWriter, r *http.Request, p *principal) error {
-	id := r.PathValue("id")
-	if err := s.DB.DeleteQRCode(r.Context(), id, p.User.ID); err != nil {
+	q, err := s.ownQR(r, p)
+	if err != nil {
 		return err
 	}
-	s.audit(r.Context(), p, "qrcode.delete", "qrcode", id, nil)
+	if err := s.DB.DeleteQRCode(r.Context(), q.ID, p.User.ID); err != nil {
+		return err
+	}
+	s.releaseFile(r.Context(), q.FileID)
+	s.audit(r.Context(), p, "qrcode.delete", "qrcode", q.ID, nil)
 	noContent(w)
 	return nil
 }

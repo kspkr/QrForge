@@ -124,6 +124,24 @@ const report = await qrforge.campaigns.analytics(summer.id, { range: "90d" });
 console.table(report.per_qrcode);
 ```
 
+### Files
+
+Available when the server runs with `QRFORGE_FILE_UPLOADS=enabled`. A dynamic code with a `file_id` serves that file instead of redirecting.
+
+| Method                    | Endpoint                     |
+| ------------------------- | ---------------------------- |
+| `files.upload(blob, name?)` | `POST /api/v1/files`       |
+| `files.list()`            | `GET /api/v1/files`          |
+| `files.get(id)`           | `GET /api/v1/files/:id`      |
+| `files.delete(id)`        | `DELETE /api/v1/files/:id`   |
+
+```js
+import { openAsBlob } from "node:fs";
+
+const file = await qrforge.files.upload(await openAsBlob("menu.pdf"), "menu.pdf");
+await qrforge.qrcodes.create({ name: "Lunch menu", file_id: file.id });
+```
+
 ### Analytics, domains and server info
 
 | Method                              | Endpoint                          |

@@ -259,8 +259,8 @@ export default function Codes() {
                       <KindBadge qr={qr} />
                     </td>
                     <td className="max-w-[220px] px-3 py-2.5">
-                      <span className="muted block truncate" title={qr.destination ?? qr.content}>
-                        {qr.kind === "dynamic" ? hostOf(qr.destination) : qr.content.split(/\r?\n/)[0]}
+                      <span className="muted block truncate" title={qr.file?.name ?? qr.destination ?? qr.content}>
+                        {qr.file ? qr.file.name : qr.kind === "dynamic" ? hostOf(qr.destination) : qr.content.split(/\r?\n/)[0]}
                       </span>
                     </td>
                     <td className="px-3 py-2.5 text-right tabular-nums">{qr.kind === "dynamic" ? formatNumber(qr.scan_count) : "—"}</td>

@@ -29,6 +29,8 @@ All settings are `QRFORGE_*` environment variables, and all are optional.
 | `QRFORGE_CUSTOM_DOMAIN_SCHEME` | `https` | Scheme used in redirect links on verified custom domains. |
 | `QRFORGE_LOG_FORMAT` | `text` | `text` or `json`. |
 | `QRFORGE_RATE_LIMIT_API`, `_API_KEY`, `_AUTH`, `_REDIRECT` | `600`, `600`, `10`, `120` | Requests per minute, per IP or per API key. |
+| `QRFORGE_FILE_UPLOADS` | `disabled` | `enabled` lets dynamic codes serve uploaded files. |
+| `QRFORGE_FILE_DIR`, `_MAX_BYTES`, `_QUOTA_BYTES` | `data/files`, `10485760`, `104857600` | Upload directory, largest file and storage per user. |
 
 ## API reference
 
@@ -43,6 +45,7 @@ The API is described in [`openapi.yaml`](./openapi.yaml), which the server also 
 | `server/migrations` | Embedded SQL migrations and runner |
 | `server/auth` | Passwords, sessions, API keys, password reset, SMTP |
 | `server/security` | Rate limiting, client IPs, headers, destination validation |
+| `server/files` | Optional on-disk storage for uploaded files |
 | `server/analytics` | User-agent parsing, bot detection, visitor hashing, reports |
 | `server/redirect` | `/r/{slug}` handler and status pages |
 | `server/settings` | Runtime settings edited by administrators |

@@ -14,16 +14,17 @@ import {
   MoreHorizontal,
   History,
   ChartColumnBig,
+  FileText,
 } from "lucide-react";
 import { api } from "../../lib/api.js";
 import { useAsync } from "../../hooks/useAsync.js";
 import { useDocumentTitle } from "../../hooks/useDocumentTitle.js";
 import { designToOptions, normalizeDesign } from "../../lib/design.js";
-import { formatDateTime, formatRelative, formatNumber } from "../../lib/format.js";
+import { formatBytes, formatDateTime, formatRelative, formatNumber } from "../../lib/format.js";
 import { QR_TYPE_MAP } from "../../lib/qrTypes.js";
 import { cx } from "../../lib/cx.js";
 import { AnalyticsPanel } from "../../components/AnalyticsPanel.jsx";
-import { CodeForm, codeFormToBody, initialCodeForm } from "../../components/CodeForm.jsx";
+import { CodeForm, FilePicker, codeFormToBody, initialCodeForm } from "../../components/CodeForm.jsx";
 import { DesignPanel } from "../../components/studio/DesignPanel.jsx";
 import { PreviewPanel } from "../../components/studio/PreviewPanel.jsx";
 import { StatusBadge, KindBadge } from "../../components/qr.jsx";
@@ -32,6 +33,7 @@ import { Button } from "../../components/ui/Button.jsx";
 import { Input } from "../../components/ui/Field.jsx";
 import { Alert, EmptyState, Skeleton } from "../../components/ui/misc.jsx";
 import { ConfirmDialog, Menu, useToast } from "../../components/ui/overlay.jsx";
+import { useSession } from "../../lib/session.jsx";
 
 function CopyButton({ value, label = "Copy" }) {
   const [copied, setCopied] = useState(false);
@@ -113,13 +115,51 @@ function DestinationCard({ qr, onSaved }) {
           <ExternalLink className="h-3.5 w-3.5 shrink-0 text-zinc-400" />
         </a>
       )}
-      <div className="mt-4 rounded-lg bg-zinc-50 px-3 py-2 dark:bg-zinc-900/70">
-        <p className="muted text-xs">Encoded short link</p>
-        <div className="flex items-center justify-between gap-2">
-          <code className="truncate font-mono text-[13px]">{qr.redirect_url}</code>
-          <CopyButton value={qr.redirect_url} label="Copy short link" />
-        </div>
+      <ShortLink url={qr.redirect_url} />
+    </div>
+  );
+}
+
+function ShortLink({ url }) {
+  return (
+    <div className="mt-4 rounded-lg bg-zinc-50 px-3 py-2 dark:bg-zinc-900/70">
+      <p className="muted text-xs">Encoded short link</p>
+      <div className="flex items-center justify-between gap-2">
+        <code className="truncate font-mono text-[13px]">{url}</code>
+        <CopyButton value={url} label="Copy short link" />
       </div>
+    </div>
+  );
+}
+
+function FileCard({ qr, onSaved }) {
+  const toast = useToast();
+  const { server } = useSession();
+  const [error, setError] = useState(null);
+
+  const replace = async (file) => {
+    setError(null);
+    try {
+      const updated = await api.patch(`/qrcodes/${qr.id}`, { file_id: file.id });
+      toast.success("File replaced", { description: "Scans download the new file immediately." });
+      onSaved(updated);
+    } catch (err) {
+      setError(err.fields?.file_id ?? err.message);
+    }
+  };
+
+  return (
+    <div className="surface p-5">
+      <h3 className="flex items-center gap-1.5 text-sm font-semibold">
+        <FileText className="h-4 w-4 text-zinc-400" /> File
+      </h3>
+      <div className="mt-3">
+        <FilePicker file={qr.file} onChange={replace} error={error} limits={server?.file_uploads} />
+      </div>
+      <p className="muted mt-2 text-xs">
+        {qr.file.content_type.split(";")[0]} · {formatBytes(qr.file.size)}
+      </p>
+      <ShortLink url={qr.redirect_url} />
     </div>
   );
 }
@@ -398,7 +438,13 @@ export default function CodeDetail() {
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-[340px_minmax(0,1fr)]">
             <PreviewPanel data={qr.content} options={designToOptions(qr.design)} compact filename={qr.name} />
             <div className="space-y-6">
-              {qr.kind === "dynamic" ? <DestinationCard key={qr.destination} qr={qr} onSaved={setData} /> : <StaticContent qr={qr} />}
+              {qr.kind !== "dynamic" ? (
+                <StaticContent qr={qr} />
+              ) : qr.file ? (
+                <FileCard qr={qr} onSaved={setData} />
+              ) : (
+                <DestinationCard key={qr.destination} qr={qr} onSaved={setData} />
+              )}
               <Details qr={qr} campaigns={campaigns.data?.data ?? []} domains={domains.data?.data ?? []} />
             </div>
           </div>

@@ -42,7 +42,8 @@ COPY --from=web /src/apps/web/dist /app/web
 
 ENV QRFORGE_ADDR=:8080 \
     QRFORGE_WEB_DIR=/app/web \
-    QRFORGE_DATABASE_URL=sqlite:///data/qrforge.db
+    QRFORGE_DATABASE_URL=sqlite:///data/qrforge.db \
+    QRFORGE_FILE_DIR=/data/files
 
 USER qrforge
 EXPOSE 8080

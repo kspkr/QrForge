@@ -36,7 +36,10 @@ export default function CodeNew() {
     setError(null);
     try {
       const body = codeFormToBody(form, { isNew: true });
-      if (!body.name) body.name = form.destination ? new URL(form.destination).host : "Dynamic code";
+      if (!body.name) {
+        if (form.target === "file") body.name = form.file?.name ?? "File";
+        else body.name = form.destination ? new URL(form.destination).host : "Dynamic code";
+      }
       const qr = await api.post("/qrcodes", { ...body, design });
       toast.success("Dynamic code created", { description: qr.redirect_url });
       navigate(`/app/codes/${qr.id}`);
@@ -66,7 +69,7 @@ export default function CodeNew() {
               <Button variant="secondary" onClick={() => navigate(-1)}>
                 Cancel
               </Button>
-              <Button type="submit" variant="primary" loading={saving} disabled={!form.destination.trim()}>
+              <Button type="submit" variant="primary" loading={saving} disabled={form.target === "file" ? !form.file : !form.destination.trim()}>
                 Create code
               </Button>
             </div>

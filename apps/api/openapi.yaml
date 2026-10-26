@@ -37,6 +37,8 @@ tags:
   - name: System
   - name: Auth
   - name: QR codes
+  - name: Files
+    description: Only available when the server runs with `QRFORGE_FILE_UPLOADS=enabled`; otherwise these endpoints return 404.
   - name: Analytics
   - name: Campaigns
   - name: Domains
@@ -630,6 +632,76 @@ paths:
         "204": { description: Revoked }
         "404": { $ref: "#/components/responses/NotFound" }
 
+  /files:
+    post:
+      tags: [Files]
+      summary: Upload a file
+      description: |
+        Stores a file that dynamic codes can serve instead of redirecting. Accepted types are PDF, PNG,
+        JPEG, GIF, WebP, plain text, CSV, DOCX, XLSX and PPTX; the extension must match the contents.
+        Files that no code uses are deleted after 24 hours.
+      parameters: [{ $ref: "#/components/parameters/CSRF" }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+      responses:
+        "201":
+          description: Stored
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/File" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "413":
+          description: The file exceeds `QRFORGE_FILE_MAX_BYTES` (`payload_too_large`)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+    get:
+      tags: [Files]
+      summary: List your files
+      responses:
+        "200":
+          description: Your files, newest first
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/File" } }
+                  used_bytes: { type: integer }
+                  quota_bytes: { type: integer, description: 0 means unlimited }
+  /files/{id}:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    get:
+      tags: [Files]
+      summary: Get a file
+      responses:
+        "200":
+          description: The file
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/File" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [Files]
+      summary: Delete a file
+      parameters: [{ $ref: "#/components/parameters/CSRF" }]
+      responses:
+        "204": { description: Deleted }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: A QR code still serves this file (`file_in_use`)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
   /audit-log:
     get:
       tags: [Audit]
@@ -963,7 +1035,7 @@ components:
               type: string
               enum: [validation_failed, invalid_json, unauthorized, forbidden, csrf_failed, not_found, conflict, rate_limited,
                 payload_too_large, registration_closed, account_disabled, invalid_credentials, limit_reached,
-                destination_blocked, verification_failed, internal]
+                destination_blocked, verification_failed, file_in_use, internal]
             message: { type: string }
             fields:
               type: object
@@ -996,10 +1068,18 @@ components:
             analytics: { type: boolean }
             custom_domains: { type: boolean }
             password_reset_email: { type: boolean }
+            file_uploads: { type: boolean }
         limits:
           type: object
           properties:
             max_redirect_length: { type: integer }
+        file_uploads:
+          type: object
+          description: Present only when file uploads are enabled
+          properties:
+            max_bytes: { type: integer }
+            quota_bytes: { type: integer, description: 0 means unlimited }
+            extensions: { type: array, items: { type: string }, examples: [[".pdf", ".png"]] }
     User:
       type: object
       properties:
@@ -1028,7 +1108,18 @@ components:
         content: { type: string, maxLength: 200 }
     QRType:
       type: string
-      enum: [url, text, wifi, vcard, email, sms, phone, location, calendar]
+      description: "`file` is used by dynamic codes that serve an uploaded file"
+      enum: [url, text, wifi, vcard, email, sms, phone, location, calendar, file]
+    File:
+      type: object
+      properties:
+        id: { type: string, examples: [file_k3j9x0q2m4n8p1r5] }
+        name: { type: string, examples: [menu.pdf] }
+        content_type: { type: string, examples: [application/pdf] }
+        size: { type: integer, description: Bytes }
+        sha256: { type: string }
+        code_count: { type: integer, description: Number of codes serving this file }
+        created_at: { type: string, format: date-time }
     QRCode:
       type: object
       properties:
@@ -1051,6 +1142,7 @@ components:
         domain_id: { type: [string, "null"] }
         design: { type: [object, "null"], description: "Opaque @qrforge/core style options (max 256 KB)" }
         form_data: { type: [object, "null"], description: "Opaque structured input used to build the payload (max 64 KB)" }
+        file: { oneOf: [{ $ref: "#/components/schemas/File" }, { type: "null" }], description: The file served by this code, if any }
         scan_count: { type: integer }
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
@@ -1061,7 +1153,8 @@ components:
         name: { type: string, maxLength: 200, description: Defaults to the destination host }
         kind: { type: string, enum: [static, dynamic], default: dynamic }
         type: { type: string, enum: [static, dynamic], description: Alias of kind }
-        destination: { type: string, format: uri, description: Required for dynamic codes. http(s) only. }
+        destination: { type: string, format: uri, description: Required for dynamic codes unless file_id is set. http(s) only. }
+        file_id: { type: string, description: Serve this uploaded file instead of redirecting (dynamic only, requires file uploads) }
         qr_type: { $ref: "#/components/schemas/QRType" }
         content: { type: string, maxLength: 4096, description: Required for static codes }
         slug: { type: string, pattern: "^[A-Za-z0-9][A-Za-z0-9_-]{2,63}$", description: Custom slug (dynamic only); random when omitted }
@@ -1078,7 +1171,8 @@ components:
       type: object
       properties:
         name: { type: string, maxLength: 200 }
-        destination: { type: string, format: uri }
+        destination: { type: string, format: uri, description: Replaces file_id when set }
+        file_id: { type: string, description: Replaces destination when set }
         qr_type: { $ref: "#/components/schemas/QRType" }
         content: { type: string, maxLength: 4096 }
         slug: { type: string }

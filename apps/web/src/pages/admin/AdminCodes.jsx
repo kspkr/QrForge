@@ -84,8 +84,8 @@ export default function AdminCodes() {
                   </td>
                   <td className="muted px-3 py-2.5 text-xs">{qr.owner_email}</td>
                   <td className="max-w-[240px] px-3 py-2.5">
-                    <span className="block truncate text-xs" title={qr.destination ?? qr.content}>
-                      {qr.destination ?? qr.content}
+                    <span className="block truncate text-xs" title={qr.file?.name ?? qr.destination ?? qr.content}>
+                      {qr.file ? `File: ${qr.file.name}` : (qr.destination ?? qr.content)}
                     </span>
                   </td>
                   <td className="px-3 py-2.5 text-right tabular-nums">{formatNumber(qr.scan_count)}</td>

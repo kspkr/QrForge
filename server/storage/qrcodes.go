@@ -27,6 +27,7 @@ type QRCode struct {
 	DomainID         *string
 	Design           *string // JSON
 	FormData         *string // JSON
+	FileID           *string
 	CreatedAt        int64
 	UpdatedAt        int64
 
@@ -36,24 +37,29 @@ type QRCode struct {
 	OwnerDisabled  bool
 	DomainHost     *string
 	DomainVerified bool
+	File           *File // set when FileID refers to an existing file
 }
 
 const qrSelect = `SELECT q.id, q.user_id, q.name, q.kind, q.qr_type, q.content, q.destination, q.slug, q.status,
 	q.disabled_reason, q.admin_locked, q.expires_at, q.password_hash, q.utm, q.analytics_enabled, q.campaign_id,
-	q.domain_id, q.design, q.form_data, q.created_at, q.updated_at,
+	q.domain_id, q.design, q.form_data, q.file_id, q.created_at, q.updated_at,
 	(SELECT COUNT(*) FROM scans s WHERE s.qrcode_id = q.id) AS scan_count,
-	u.email, u.disabled, d.hostname, d.verified
-	FROM qrcodes q JOIN users u ON u.id = q.user_id LEFT JOIN domains d ON d.id = q.domain_id`
+	u.email, u.disabled, d.hostname, d.verified,
+	f.name, f.content_type, f.size, f.sha256, f.storage_key, f.created_at
+	FROM qrcodes q JOIN users u ON u.id = q.user_id LEFT JOIN domains d ON d.id = q.domain_id
+	LEFT JOIN files f ON f.id = q.file_id`
 
 func scanQRCode(row interface{ Scan(...any) error }) (*QRCode, error) {
 	var q QRCode
-	var dest, slug, reason, pw, utm, campaign, domain, design, form, host sql.NullString
-	var expires sql.NullInt64
+	var dest, slug, reason, pw, utm, campaign, domain, design, form, fileID, host sql.NullString
+	var fileName, fileType, fileHash, fileKey sql.NullString
+	var expires, fileSize, fileCreated sql.NullInt64
 	var verified sql.NullBool
 	err := row.Scan(&q.ID, &q.UserID, &q.Name, &q.Kind, &q.QRType, &q.Content, &dest, &slug, &q.Status,
 		&reason, &q.AdminLocked, &expires, &pw, &utm, &q.AnalyticsEnabled, &campaign,
-		&domain, &design, &form, &q.CreatedAt, &q.UpdatedAt, &q.ScanCount,
-		&q.OwnerEmail, &q.OwnerDisabled, &host, &verified)
+		&domain, &design, &form, &fileID, &q.CreatedAt, &q.UpdatedAt, &q.ScanCount,
+		&q.OwnerEmail, &q.OwnerDisabled, &host, &verified,
+		&fileName, &fileType, &fileSize, &fileHash, &fileKey, &fileCreated)
 	if err != nil {
 		return nil, mapErr(err)
 	}
@@ -63,6 +69,13 @@ func scanQRCode(row interface{ Scan(...any) error }) (*QRCode, error) {
 	q.ExpiresAt = ptrInt64(expires)
 	q.DomainHost = ptrString(host)
 	q.DomainVerified = verified.Valid && verified.Bool
+	q.FileID = ptrString(fileID)
+	if q.FileID != nil && fileKey.Valid {
+		q.File = &File{
+			ID: *q.FileID, UserID: q.UserID, Name: fileName.String, ContentType: fileType.String,
+			Size: fileSize.Int64, SHA256: fileHash.String, StorageKey: fileKey.String, CreatedAt: fileCreated.Int64,
+		}
+	}
 	return &q, nil
 }
 
@@ -78,11 +91,11 @@ func (db *DB) CreateQRCode(ctx context.Context, q *QRCode) error {
 	}
 	_, err := db.Exec(ctx, `INSERT INTO qrcodes (id, user_id, name, kind, qr_type, content, destination, slug, status,
 		disabled_reason, admin_locked, expires_at, password_hash, utm, analytics_enabled, campaign_id, domain_id,
-		design, form_data, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		design, form_data, file_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		q.ID, q.UserID, q.Name, q.Kind, q.QRType, q.Content, nullString(q.Destination), nullString(q.Slug), q.Status,
 		nullString(q.DisabledReason), q.AdminLocked, nullInt64(q.ExpiresAt), nullString(q.PasswordHash), nullString(q.UTM),
 		q.AnalyticsEnabled, nullString(q.CampaignID), nullString(q.DomainID), nullString(q.Design), nullString(q.FormData),
-		q.CreatedAt, q.UpdatedAt)
+		nullString(q.FileID), q.CreatedAt, q.UpdatedAt)
 	return mapErr(err)
 }
 
@@ -91,11 +104,11 @@ func (db *DB) UpdateQRCode(ctx context.Context, q *QRCode) error {
 	q.UpdatedAt = Now()
 	_, err := db.Exec(ctx, `UPDATE qrcodes SET name = ?, qr_type = ?, content = ?, destination = ?, slug = ?, status = ?,
 		disabled_reason = ?, admin_locked = ?, expires_at = ?, password_hash = ?, utm = ?, analytics_enabled = ?,
-		campaign_id = ?, domain_id = ?, design = ?, form_data = ?, updated_at = ? WHERE id = ?`,
+		campaign_id = ?, domain_id = ?, design = ?, form_data = ?, file_id = ?, updated_at = ? WHERE id = ?`,
 		q.Name, q.QRType, q.Content, nullString(q.Destination), nullString(q.Slug), q.Status,
 		nullString(q.DisabledReason), q.AdminLocked, nullInt64(q.ExpiresAt), nullString(q.PasswordHash), nullString(q.UTM),
 		q.AnalyticsEnabled, nullString(q.CampaignID), nullString(q.DomainID), nullString(q.Design), nullString(q.FormData),
-		q.UpdatedAt, q.ID)
+		nullString(q.FileID), q.UpdatedAt, q.ID)
 	return mapErr(err)
 }
 

@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/kspkr/QrForge/server/config"
+	"github.com/kspkr/QrForge/server/files"
 	"github.com/kspkr/QrForge/server/migrations"
 	"github.com/kspkr/QrForge/server/settings"
 	"github.com/kspkr/QrForge/server/storage"
@@ -60,6 +61,14 @@ func newEnv(t *testing.T, mutate ...func(*config.Config)) *testEnv {
 	}
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	s := New(cfg, db, st, log, []byte("openapi: 3.1.0\n"))
+	if cfg.FileUploads.Enabled {
+		store, err := files.Open(t.TempDir(), cfg.FileUploads.MaxBytes)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { store.Close() })
+		s.EnableFiles(store)
+	}
 	srv := httptest.NewServer(s.Handler())
 	u, _ := url.Parse(srv.URL)
 	cfg.BaseURL = u
@@ -72,7 +81,7 @@ func newEnv(t *testing.T, mutate ...func(*config.Config)) *testEnv {
 
 func resetPostgres(t *testing.T, db *storage.DB) {
 	t.Helper()
-	for _, tbl := range []string{"scans", "qrcode_history", "abuse_reports", "qrcodes", "campaigns", "domains", "api_keys",
+	for _, tbl := range []string{"scans", "qrcode_history", "abuse_reports", "qrcodes", "files", "campaigns", "domains", "api_keys",
 		"password_resets", "sessions", "audit_logs", "salts", "settings", "users", "schema_migrations"} {
 		if _, err := db.Exec(context.Background(), "DROP TABLE IF EXISTS "+tbl+" CASCADE"); err != nil {
 			t.Fatal(err)
