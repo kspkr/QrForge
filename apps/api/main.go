@@ -22,6 +22,7 @@ import (
 
 	"github.com/kspkr/QrForge/server/api"
 	"github.com/kspkr/QrForge/server/config"
+	"github.com/kspkr/QrForge/server/files"
 	"github.com/kspkr/QrForge/server/migrations"
 	"github.com/kspkr/QrForge/server/settings"
 	"github.com/kspkr/QrForge/server/storage"
@@ -76,6 +77,15 @@ func run() error {
 		return fmt.Errorf("load settings: %w", err)
 	}
 	srv := api.New(cfg, db, st, log, openapiSpec)
+	if cfg.FileUploads.Enabled {
+		store, err := files.Open(cfg.FileUploads.Dir, cfg.FileUploads.MaxBytes)
+		if err != nil {
+			return err
+		}
+		defer store.Close()
+		srv.EnableFiles(store)
+		log.Info("file uploads enabled", "dir", cfg.FileUploads.Dir, "max_bytes", cfg.FileUploads.MaxBytes)
+	}
 	if err := srv.Bootstrap(ctx); err != nil {
 		return fmt.Errorf("bootstrap admin: %w", err)
 	}

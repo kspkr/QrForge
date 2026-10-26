@@ -24,7 +24,7 @@ Used by the web app. `POST /auth/login` sets an `HttpOnly`, `SameSite=Lax` cooki
 ## Conventions
 
 - Bodies are JSON with snake_case field names. Timestamps are RFC 3339 strings in UTC.
-- Request bodies are limited to 1 MiB by default (`QRFORGE_MAX_BODY_BYTES`).
+- Request bodies are limited to 1 MiB by default (`QRFORGE_MAX_BODY_BYTES`). File uploads have their own limit (`QRFORGE_FILE_MAX_BYTES`).
 - Lists accept `?page=1&per_page=20` (max 100) and return:
 
 ```json
@@ -49,7 +49,7 @@ Used by the web app. `POST /auth/login` sets an `HttpOnly`, `SameSite=Lax` cooki
 | 401 | `unauthorized`, `invalid_credentials` |
 | 403 | `forbidden`, `csrf_failed`, `registration_closed`, `account_disabled`, `limit_reached` |
 | 404 | `not_found` |
-| 409 | `conflict` (email or slug taken) |
+| 409 | `conflict` (email or slug taken), `file_in_use` |
 | 413 | `payload_too_large` |
 | 422 | `validation_failed`, `destination_blocked`, `verification_failed` |
 | 429 | `rate_limited` (with `Retry-After`) |

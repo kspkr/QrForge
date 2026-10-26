@@ -1,7 +1,7 @@
 // Type definitions for @qrforge/sdk.
 
 export type QRKind = "static" | "dynamic";
-export type QRType = "url" | "text" | "wifi" | "vcard" | "email" | "sms" | "phone" | "location" | "calendar";
+export type QRType = "url" | "text" | "wifi" | "vcard" | "email" | "sms" | "phone" | "location" | "calendar" | "file";
 export type AnalyticsRange = "24h" | "7d" | "30d" | "90d" | "365d" | "all";
 
 export interface UTM {
@@ -32,15 +32,27 @@ export interface QRCode {
   domain_id: string | null;
   design: Record<string, unknown> | null;
   form_data: Record<string, unknown> | null;
+  file: StoredFile | null;
   scan_count: number;
   created_at: string;
   updated_at: string;
+}
+
+export interface StoredFile {
+  id: string;
+  name: string;
+  content_type: string;
+  size: number;
+  sha256: string;
+  code_count: number;
+  created_at: string;
 }
 
 export interface CreateQRCodeInput {
   name: string;
   kind?: QRKind;
   destination?: string;
+  file_id?: string;
   qr_type?: QRType;
   content?: string;
   slug?: string;
@@ -179,14 +191,23 @@ export class QRForge {
     list(params?: { page?: number; per_page?: number }): Promise<Page<Domain>>;
   };
 
+  /** Requires a server with file uploads enabled. */
+  files: {
+    upload(file: Blob, name?: string): Promise<StoredFile>;
+    list(): Promise<{ data: StoredFile[]; used_bytes: number; quota_bytes: number }>;
+    get(id: string): Promise<StoredFile>;
+    delete(id: string): Promise<null>;
+  };
+
   health(): Promise<{ status: string; version: string; database: string }>;
   config(): Promise<{
     version: string;
     base_url: string;
     registration_enabled: boolean;
     setup_required: boolean;
-    features: { analytics: boolean; custom_domains: boolean; password_reset_email: boolean };
+    features: { analytics: boolean; custom_domains: boolean; password_reset_email: boolean; file_uploads: boolean };
     limits: { max_redirect_length: number };
+    file_uploads?: { max_bytes: number; quota_bytes: number; extensions: string[] };
   }>;
 
   paginate<T = unknown>(path: string, params?: Record<string, unknown>): AsyncGenerator<T>;

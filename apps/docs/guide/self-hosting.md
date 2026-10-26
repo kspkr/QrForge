@@ -38,6 +38,10 @@ All settings are environment variables, and all are optional.
 | `QRFORGE_RATE_LIMIT_API_KEY` | `600` | API requests per minute per API key. |
 | `QRFORGE_RATE_LIMIT_AUTH` | `10` | Sign-in, registration and reset requests per minute per IP address. |
 | `QRFORGE_RATE_LIMIT_REDIRECT` | `120` | Redirects per minute per IP address. |
+| `QRFORGE_FILE_UPLOADS` | `disabled` | `enabled` lets dynamic codes serve uploaded files. See [File uploads](./file-uploads). |
+| `QRFORGE_FILE_DIR` | `data/files` | Directory for uploaded files (`/data/files` in Docker). |
+| `QRFORGE_FILE_MAX_BYTES` | `10485760` | Largest accepted upload. |
+| `QRFORGE_FILE_QUOTA_BYTES` | `104857600` | Upload storage per user. `0` for unlimited. |
 
 Runtime policies are stored in the database and edited under **Admin → Settings**: registration, per-user code limits, destination allowlist and blocklist, blocking of private destinations, maximum destination length and analytics retention.
 
@@ -109,7 +113,7 @@ PostgreSQL:
 pg_dump "$QRFORGE_DATABASE_URL" | gzip > qrforge-$(date +%F).sql.gz
 ```
 
-All state (users, codes, scans and settings) is in the database. Nothing else on disk needs to be backed up.
+All state (users, codes, scans and settings) is in the database. If [file uploads](./file-uploads) are enabled, also back up `QRFORGE_FILE_DIR`.
 
 ## Scaling
 

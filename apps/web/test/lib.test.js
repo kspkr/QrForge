@@ -91,4 +91,12 @@ describe("code form", () => {
     const form = { ...initialCodeForm({ has_password: true, destination: "https://x.y", name: "a" }), clearPassword: true };
     expect(codeFormToBody(form).password).toBeNull();
   });
+
+  it("sends file_id instead of a destination for file codes", () => {
+    const form = initialCodeForm({ name: "Menu", file: { id: "file_1", name: "menu.pdf", size: 10 } });
+    expect(form.target).toBe("file");
+    const body = codeFormToBody(form, { isNew: true });
+    expect(body.file_id).toBe("file_1");
+    expect(body).not.toHaveProperty("destination");
+  });
 });

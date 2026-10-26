@@ -39,6 +39,15 @@ type RateLimits struct {
 	LoginPerEmail   int // login attempts per email per hour
 }
 
+// FileUploads configures optional file hosting for dynamic codes. It is off
+// by default; when enabled, uploaded files are stored on local disk in Dir.
+type FileUploads struct {
+	Enabled    bool
+	Dir        string
+	MaxBytes   int64 // largest accepted file
+	QuotaBytes int64 // total storage per user, 0 = unlimited
+}
+
 // Config is the full server configuration.
 type Config struct {
 	Addr                  string
@@ -59,6 +68,7 @@ type Config struct {
 	SessionTTL            time.Duration
 	BcryptCost            int
 	DisableBackgroundJobs bool
+	FileUploads           FileUploads
 }
 
 // DefaultRateLimits returns production defaults.
@@ -89,6 +99,11 @@ func Default() *Config {
 		RateLimits:         DefaultRateLimits(),
 		SessionTTL:         30 * 24 * time.Hour,
 		BcryptCost:         12,
+		FileUploads: FileUploads{
+			Dir:        "data/files",
+			MaxBytes:   10 << 20,
+			QuotaBytes: 100 << 20,
+		},
 	}
 }
 
@@ -174,6 +189,32 @@ func Load() (*Config, error) {
 	}
 	if v := get("QRFORGE_LOG_FORMAT"); v != "" {
 		c.LogFormat = v
+	}
+
+	switch strings.ToLower(get("QRFORGE_FILE_UPLOADS")) {
+	case "", "disabled":
+		c.FileUploads.Enabled = false
+	case "enabled":
+		c.FileUploads.Enabled = true
+	default:
+		return nil, fmt.Errorf("QRFORGE_FILE_UPLOADS must be enabled or disabled")
+	}
+	if v := get("QRFORGE_FILE_DIR"); v != "" {
+		c.FileUploads.Dir = v
+	}
+	if v := get("QRFORGE_FILE_MAX_BYTES"); v != "" {
+		n, err := strconv.ParseInt(v, 10, 64)
+		if err != nil || n < 1024 || n > 1<<30 {
+			return nil, fmt.Errorf("QRFORGE_FILE_MAX_BYTES must be an integer between 1024 and 1073741824")
+		}
+		c.FileUploads.MaxBytes = n
+	}
+	if v := get("QRFORGE_FILE_QUOTA_BYTES"); v != "" {
+		n, err := strconv.ParseInt(v, 10, 64)
+		if err != nil || n < 0 {
+			return nil, fmt.Errorf("QRFORGE_FILE_QUOTA_BYTES must be a non-negative integer")
+		}
+		c.FileUploads.QuotaBytes = n
 	}
 
 	limits := map[string]*int{

@@ -63,6 +63,7 @@ server/
   redirect/   /r/{slug} handler, password form, status pages
   settings/   runtime settings edited by administrators
   api/        REST handlers and background jobs
+  files/      optional storage for uploaded files
   web/        static file serving for the web app
 docker/       Dockerfile, Compose variants, Caddyfile
 ```

@@ -74,7 +74,7 @@ export default function Overview() {
                   <QRThumb qr={qr} size={34} />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium">{qr.name}</p>
-                    <p className="muted truncate text-xs">{qr.destination ?? qr.content.split(/\r?\n/)[0]}</p>
+                    <p className="muted truncate text-xs">{qr.file?.name ?? qr.destination ?? qr.content.split(/\r?\n/)[0]}</p>
                   </div>
                   {qr.kind === "dynamic" && <span className="muted text-xs tabular-nums">{formatNumber(qr.scan_count)} scans</span>}
                   <StatusBadge qr={qr} />

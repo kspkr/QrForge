@@ -60,6 +60,7 @@ export default defineConfig({
           items: [
             { text: "REST API", link: "/guide/api" },
             { text: "Dynamic QR codes", link: "/guide/dynamic-qr-codes" },
+            { text: "File uploads", link: "/guide/file-uploads" },
             { text: "Analytics", link: "/guide/analytics" },
           ],
         },

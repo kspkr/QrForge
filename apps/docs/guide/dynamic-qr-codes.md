@@ -82,6 +82,6 @@ Destinations are validated when saved and again on every redirect, so policy cha
 | Editable after printing | No | Yes |
 | Analytics | No | Yes |
 | Works if the server is unavailable | Yes | No |
-| Content types | All (Wi-Fi, vCard, text and others) | URLs |
+| Content types | All (Wi-Fi, vCard, text and others) | URLs, or files when [uploads](./file-uploads) are enabled |
 
 Static codes can also be saved to the dashboard for later editing and downloading. The server is still not involved when they are scanned.

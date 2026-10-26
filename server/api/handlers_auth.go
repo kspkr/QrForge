@@ -12,6 +12,7 @@ import (
 
 	"github.com/kspkr/QrForge/server/auth"
 	"github.com/kspkr/QrForge/server/config"
+	"github.com/kspkr/QrForge/server/files"
 	"github.com/kspkr/QrForge/server/storage"
 )
 
@@ -56,7 +57,7 @@ func (s *Server) publicConfig(w http.ResponseWriter, r *http.Request, _ *princip
 		return err
 	}
 	st := s.Settings.Get()
-	writeJSON(w, http.StatusOK, map[string]any{
+	out := map[string]any{
 		"version":              config.Version,
 		"base_url":             s.Cfg.BaseURLString(),
 		"registration_enabled": st.RegistrationEnabled || users == 0,
@@ -65,9 +66,18 @@ func (s *Server) publicConfig(w http.ResponseWriter, r *http.Request, _ *princip
 			"analytics":            true,
 			"custom_domains":       true,
 			"password_reset_email": s.Mailer != nil,
+			"file_uploads":         s.Files != nil,
 		},
 		"limits": map[string]int{"max_redirect_length": st.MaxRedirectLength},
-	})
+	}
+	if s.Files != nil {
+		out["file_uploads"] = map[string]any{
+			"max_bytes":   s.Cfg.FileUploads.MaxBytes,
+			"quota_bytes": s.Cfg.FileUploads.QuotaBytes,
+			"extensions":  files.Extensions(),
+		}
+	}
+	writeJSON(w, http.StatusOK, out)
 	return nil
 }
 

@@ -35,7 +35,7 @@ func (s *Server) Bootstrap(ctx context.Context) error {
 }
 
 // RunMaintenance performs periodic cleanup: analytics retention, expired
-// sessions and reset tokens, and discarding old visitor-hash salts.
+// sessions and reset tokens, old visitor-hash salts and unused uploads.
 func (s *Server) RunMaintenance(ctx context.Context) {
 	if days := s.Settings.Get().AnalyticsRetentionDays; days > 0 {
 		cutoff := time.Now().Unix() - int64(days)*86400
@@ -50,6 +50,9 @@ func (s *Server) RunMaintenance(ctx context.Context) {
 	}
 	if err := s.Recorder.RotateSalts(ctx); err != nil {
 		s.Log.Error("salt rotation failed", "err", err)
+	}
+	if s.Files != nil {
+		s.cleanupFiles(ctx)
 	}
 }
 
